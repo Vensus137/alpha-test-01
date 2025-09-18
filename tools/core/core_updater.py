@@ -66,17 +66,18 @@ ROOT_FILES = [
 # Заводские конфиги (обновляются отдельно по запросу)
 FACTORY_CONFIGS = [
     "config/settings.yaml",
-    "config/presets/default",
-    "resources"
+    "config/presets/default"
 ]
 
 # Папки для исключения из обновления (всегда исключаются)
 EXCLUDE_PATHS = [
     "logs",
     "data", 
+    "resources",
     ".git",
     ".github",
-    ".gitignore"
+    ".gitignore",
+    ".core_update_backup*"  # Исключаем папки бэкапов
 ]
 
 # Настройки бэкапа
@@ -84,6 +85,12 @@ BACKUP_CONFIG = {
     'default_keep': True,  # По умолчанию сохранять бэкап
     'dir_name': ".core_update_backup"
 }
+
+# Папки, которые не критичны для обновления (при ошибке - пропускаем)
+NON_CRITICAL_PATHS = [
+    "tools",           # Вся папка tools (может быть заблокирована)
+    "tools/core"       # Папка core внутри tools (заблокирована процессом)
+]
 
 # Цвета для вывода
 class Colors:
@@ -105,7 +112,8 @@ def load_config():
         'root_files': ROOT_FILES,
         'factory_configs': FACTORY_CONFIGS,
         'exclude_paths': EXCLUDE_PATHS,
-        'backup': BACKUP_CONFIG
+        'backup': BACKUP_CONFIG,
+        'non_critical_paths': NON_CRITICAL_PATHS
     }
 
 def print_header():
@@ -467,33 +475,28 @@ def run_database_migration():
     if is_docker_running() and is_container_running():
         print(f"{Colors.CYAN}💡 Запускаю миграцию через Docker контейнер...{Colors.END}")
         
-        # Запускаем миграцию через Docker и ждем завершения
+        # Запускаем миграцию через Docker напрямую (логи идут сразу)
         print(f"{Colors.CYAN}⏳ Запускаю миграцию базы данных через Docker...{Colors.END}")
+        print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
+        
         try:
+            # Простой запуск без перехвата вывода - логи идут сразу
             result = subprocess.run([
                 "docker-compose", "exec", "coreness", 
-                "python", "tools/database_manager.py", "--all", "--migrate"
-            ], cwd="docker", capture_output=True, text=True, timeout=300,
-            encoding='utf-8', errors='replace')  # 5 минут таймаут
+                "python", "-u", "tools/database_manager.py", "--all", "--migrate"
+            ], cwd="docker", timeout=300)  # 5 минут таймаут
             
             if result.returncode == 0:
-                print(f"{Colors.GREEN}✅ Миграция завершена успешно через Docker!{Colors.END}")
-                # Показываем все логи миграции
-                if result.stdout:
-                    lines = result.stdout.strip().split('\n')
-                    print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
-                    for line in lines:
-                        print(f"   {line}")
+                print(f"\n{Colors.GREEN}✅ Миграция завершена успешно через Docker!{Colors.END}")
             else:
-                print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
-                if result.stderr:
-                    print(f"{Colors.RED}Ошибка: {result.stderr}{Colors.END}")
-                    
+                print(f"\n{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
+                print(f"{Colors.RED}Код возврата: {result.returncode}{Colors.END}")
+                
         except subprocess.TimeoutExpired:
-            print(f"{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
+            print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
             print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker-compose logs -f coreness{Colors.END}")
         except Exception as e:
-            print(f"{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
+            print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         
     else:
         print(f"{Colors.YELLOW}⚠️ Docker контейнер недоступен, запускаю миграцию напрямую...{Colors.END}")
@@ -501,52 +504,47 @@ def run_database_migration():
         # Проверяем наличие скрипта миграции
         migration_script = "tools/core/database_manager.py"
         if os.path.exists(migration_script):
-            # Запускаем миграцию и ждем завершения
+            # Запускаем миграцию напрямую (логи идут сразу)
             print(f"{Colors.CYAN}⏳ Запускаю миграцию базы данных...{Colors.END}")
+            print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
+            
             try:
+                # Простой запуск без перехвата вывода - логи идут сразу
                 result = subprocess.run([
-                    "python", migration_script, "--all", "--migrate"
-                ], capture_output=True, text=True, timeout=300, 
-                encoding='utf-8', errors='replace')  # 5 минут таймаут
+                    "python", "-u", migration_script, "--all", "--migrate"
+                ], timeout=300)  # 5 минут таймаут
                 
                 if result.returncode == 0:
-                    print(f"{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
-                    # Показываем все логи миграции
-                    if result.stdout:
-                        lines = result.stdout.strip().split('\n')
-                        print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
-                        for line in lines:
-                            print(f"   {line}")
+                    print(f"\n{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
                 else:
-                    print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
-                    if result.stderr:
-                        print(f"{Colors.RED}Ошибка: {result.stderr}{Colors.END}")
+                    print(f"\n{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
+                    print(f"{Colors.RED}Код возврата: {result.returncode}{Colors.END}")
                         
             except subprocess.TimeoutExpired:
-                print(f"{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
+                print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
                 print(f"{Colors.CYAN}💡 Проверьте состояние базы данных вручную{Colors.END}")
             except Exception as e:
-                print(f"{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
+                print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         else:
             print(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}")
             print(f"{Colors.YELLOW}💡 Миграция пропущена{Colors.END}")
 
 def remove_installer_script():
-    """Удаляет скрипт установки, если это была первичная установка"""
-    script_path = os.path.abspath(__file__)
-    script_dir = os.path.dirname(script_path)
+    """Удаляет скрипт установки из корня проекта (этап 3)"""
+    project_root = get_project_root()
+    root_script_path = os.path.join(project_root, "core_updater.py")
     
-    # Проверяем, находится ли скрипт в папке tools/ (любой подпапке)
-    is_in_tools = "tools" in script_dir.split(os.sep)
+    print(f"{Colors.CYAN}🧠 Этап 3: Удаление скрипта из корня проекта{Colors.END}")
     
-    if not is_in_tools:
+    # Проверяем есть ли скрипт в корне проекта
+    if os.path.exists(root_script_path):
         try:
-            os.remove(script_path)
-            print(f"{Colors.GREEN}🗑 Скрипт установки удален: {script_path}{Colors.END}")
+            os.remove(root_script_path)
+            print(f"{Colors.GREEN}🗑 Скрипт установки удален из корня: {root_script_path}{Colors.END}")
         except Exception as e:
             print(f"{Colors.YELLOW}⚠️ Не удалось удалить скрипт установки: {e}{Colors.END}")
     else:
-        print(f"{Colors.CYAN}💡 Скрипт находится в tools/, удаление не требуется{Colors.END}")
+        print(f"{Colors.CYAN}💡 Скрипт установки не найден в корне проекта{Colors.END}")
 
 def run_initial_setup():
     # Проверяем операционную систему
@@ -669,26 +667,76 @@ def is_clean_sync_item(path, config):
 
 def is_factory_config(path, config):
     """Проверяет, является ли путь заводским конфигом"""
-    return path in config['factory_configs']
+    for factory_path in config['factory_configs']:
+        # Проверяем точное совпадение
+        if path == factory_path:
+            return True
+        # Проверяем, что path является родительской папкой для factory_path
+        if factory_path.startswith(path + "/"):
+            return True
+    return False
 
-def remove_old(path):
+def is_non_critical(path, config):
+    """Проверяет, является ли путь некритичным для обновления"""
+    # Получаем только имя папки/файла из полного пути
+    path_name = os.path.basename(path)
+    
+    for non_critical_path in config['non_critical_paths']:
+        # Проверяем точное совпадение имени (для простых путей типа "tools")
+        if path_name == non_critical_path:
+            return True
+        # Проверяем, что non_critical_path содержит path_name
+        if non_critical_path.startswith(path_name + "/"):
+            return True
+        # Проверяем, что path заканчивается на non_critical_path (нормализуем пути)
+        normalized_path = path.replace("\\", "/")
+        normalized_non_critical = non_critical_path.replace("\\", "/")
+        if normalized_path.endswith(normalized_non_critical):
+            return True
+    return False
+
+def remove_old(path, config=None):
     """Удаляет старый файл или папку"""
     if os.path.exists(path):
-        if os.path.isdir(path):
-            shutil.rmtree(path)
-            print(f"{Colors.YELLOW}🗑 Удалена папка: {path}{Colors.END}")
-        else:
-            os.remove(path)
-            print(f"{Colors.YELLOW}🗑 Удален файл: {path}{Colors.END}")
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+                print(f"{Colors.YELLOW}🗑 Удалена папка: {path}{Colors.END}")
+            else:
+                os.remove(path)
+                print(f"{Colors.YELLOW}🗑 Удален файл: {path}{Colors.END}")
+        except Exception as e:
+            # Проверяем, является ли ошибка некритичной
+            if config and is_non_critical(path, config):
+                print(f"{Colors.YELLOW}⚠️ Не удалось удалить {path}: {e}{Colors.END}")
+                print(f"{Colors.CYAN}💡 Продолжаю без удаления...{Colors.END}")
+                # НЕ пробрасываем ошибку для некритичных путей
+            else:
+                # Критичная ошибка - пробрасываем исключение
+                raise e
 
-def copy_new(src, dst):
+def copy_new(src, dst, config=None):
     """Копирует новый файл или папку"""
-    if os.path.isdir(src):
-        shutil.copytree(src, dst)
-        print(f"{Colors.GREEN}📁 Скопирована папка: {dst}{Colors.END}")
-    else:
-        shutil.copy2(src, dst)
-        print(f"{Colors.GREEN}📄 Скопирован файл: {dst}{Colors.END}")
+    try:
+        if os.path.isdir(src):
+            # Если папка назначения существует, используем dirs_exist_ok
+            if os.path.exists(dst):
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copytree(src, dst)
+            print(f"{Colors.GREEN}📁 Скопирована папка: {dst}{Colors.END}")
+        else:
+            shutil.copy2(src, dst)
+            print(f"{Colors.GREEN}📄 Скопирован файл: {dst}{Colors.END}")
+    except Exception as e:
+        # Проверяем, является ли ошибка некритичной
+        if config and is_non_critical(dst, config):
+            print(f"{Colors.YELLOW}⚠️ Не удалось скопировать {dst}: {e}{Colors.END}")
+            print(f"{Colors.CYAN}💡 Продолжаю без копирования...{Colors.END}")
+            # НЕ пробрасываем ошибку для некритичных путей
+        else:
+            # Критичная ошибка - пробрасываем исключение
+            raise e
 
 def create_backup(project_root, config, include_factory_configs=False):
     """Создает резервную копию проекта"""
@@ -715,6 +763,10 @@ def create_backup(project_root, config, include_factory_configs=False):
     
     # Копируем все файлы и папки
     for item in os.listdir(project_root):
+        # Пропускаем папку бэкапа (чтобы избежать рекурсии)
+        if item.startswith(config['backup']['dir_name']):
+            continue
+            
         if is_excluded(item, config):
             continue
             
@@ -755,12 +807,16 @@ def restore_backup(backup_dir, project_root, config):
             backup_path = os.path.join(backup_dir, item)
             target_path = os.path.join(project_root, item)
             
+            # Пропускаем исключенные элементы
             if is_excluded(item, config):
+                print(f"{Colors.CYAN}⏭ Пропускаю исключённый: {item}{Colors.END}")
                 continue
+            
+            print(f"{Colors.CYAN}🔄 Восстанавливаю: {item}{Colors.END}")
             
             # Удаляем существующий файл/папку
             if os.path.exists(target_path):
-                remove_old(target_path)
+                remove_old(target_path, config)
             
             # Восстанавливаем из бэкапа
             if os.path.isdir(backup_path):
@@ -848,6 +904,8 @@ def download_and_update(version_info, github_token, project_root, config, update
 
         # Обновляем все файлы и папки из репозитория
         print(f"{Colors.YELLOW}♻️ Обновляю все файлы и папки...{Colors.END}")
+        non_critical_errors = []
+        
         for item in os.listdir(repo_root):
             # Проверяем исключения
             if is_excluded(item, config):
@@ -865,20 +923,67 @@ def download_and_update(version_info, github_token, project_root, config, update
             # Проверяем тип синхронизации
             if is_clean_sync_item(item, config):
                 print(f"{Colors.YELLOW}🗑 Чистая синхронизация: {item}{Colors.END}")
-                remove_old(abs_old)
-                copy_new(abs_new, abs_old)
+                remove_old(abs_old, config)
+                copy_new(abs_new, abs_old, config)
             else:
                 print(f"{Colors.CYAN}♻️ Обновляю: {item}{Colors.END}")
-                remove_old(abs_old)
-                copy_new(abs_new, abs_old)
+                remove_old(abs_old, config)
+                copy_new(abs_new, abs_old, config)
+        
+        # Если были некритичные ошибки, сообщаем об этом
+        if non_critical_errors:
+            print(f"{Colors.YELLOW}⚠️ Некритичные ошибки при обновлении: {', '.join(non_critical_errors)}{Colors.END}")
+            print(f"{Colors.CYAN}💡 Эти папки будут обновлены при следующем запуске{Colors.END}")
 
 def run_core_update():
+    """Запускает обновление ядра с правильной логикой"""
     print(f"{Colors.GREEN}🔄 Запускаем обновление ядра...{Colors.END}")
     
     # Определяем корневую папку проекта
     project_root = get_project_root()
+    script_path = os.path.abspath(__file__)
+    script_dir = os.path.dirname(script_path)
     
     print(f"{Colors.CYAN}📁 Корневая папка проекта: {project_root}{Colors.END}")
+    print(f"{Colors.CYAN}📁 Скрипт запущен из: {script_dir}{Colors.END}")
+    
+    # Проверяем, запущен ли скрипт из корня проекта
+    # Если скрипт запущен с параметром --update, значит он уже в корне
+    if script_dir != project_root and "--update" not in sys.argv:
+        # ЭТАП 1: Копируем скрипт в корень и запускаем оттуда
+        print(f"{Colors.CYAN}🧠 Этап 1: Копирую скрипт в корень проекта...{Colors.END}")
+        
+        root_script_path = os.path.join(project_root, "core_updater.py")
+        
+        try:
+            # Проверяем, что файлы разные (избегаем ошибки "same file")
+            if os.path.abspath(script_path) != os.path.abspath(root_script_path):
+                # Копируем скрипт в корень
+                shutil.copy2(script_path, root_script_path)
+                print(f"{Colors.GREEN}✅ Скрипт скопирован в корень: {root_script_path}{Colors.END}")
+            else:
+                print(f"{Colors.CYAN}💡 Скрипт уже в корне проекта{Colors.END}")
+            
+            # Запускаем новый процесс с параметром "update"
+            print(f"{Colors.CYAN}🚀 Запускаю обновление из корня проекта...{Colors.END}")
+            result = subprocess.run([sys.executable, root_script_path, "--update"], cwd=project_root)
+            
+            # Проверяем результат
+            if result.returncode == 0:
+                print(f"{Colors.GREEN}✅ Обновление завершено успешно{Colors.END}")
+            else:
+                print(f"{Colors.RED}❌ Обновление завершилось с ошибкой (код: {result.returncode}){Colors.END}")
+            
+            # Завершаем текущий процесс (освобождаем папку tools/core)
+            print(f"{Colors.CYAN}🔄 Завершаю текущий процесс (освобождаю папку tools/core){Colors.END}")
+            sys.exit(0)
+            
+        except Exception as e:
+            print(f"{Colors.RED}❌ Ошибка при копировании/запуске: {e}{Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ Продолжаю обновление из текущего местоположения...{Colors.END}")
+    
+    # ЭТАП 2: Обновление (запущено из корня проекта)
+    print(f"{Colors.CYAN}🧠 Этап 2: Обновление из корня проекта{Colors.END}")
     
     # Загружаем конфигурацию
     config = load_config()
@@ -1016,4 +1121,11 @@ def main_menu():
                 print(f"{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}")
 
 if __name__ == "__main__":
-    main_menu()
+    # Проверяем параметры командной строки
+    if len(sys.argv) > 1 and sys.argv[1] == "--update":
+        # Запуск обновления напрямую (без меню)
+        print(f"{Colors.GREEN}🔄 Запуск обновления ядра (прямой режим)...{Colors.END}")
+        run_core_update()
+    else:
+        # Обычный режим с меню
+        main_menu()
