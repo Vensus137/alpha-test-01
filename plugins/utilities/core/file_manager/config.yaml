@@ -1,0 +1,165 @@
+name: "file_manager"
+description: "Универсальная утилита для работы с файлами с поддержкой аудио, видео и универсального скачивания"
+edition: "base"
+singleton: false
+dependencies:
+  - "logger"
+  - "settings_manager"
+  - "hash_manager"
+  - "database_service"
+  - "tg_bot_initializer"
+optional_dependencies:
+  - "tg_mtproto"
+settings:
+  default_download_folder:
+    type: string
+    default: "download"
+    description: "Папка по умолчанию для скачивания файлов (относительно file_base_path)"
+interface:
+  methods:
+    validate_file:
+      description: "Универсальная валидация файла"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу для валидации"
+        max_size_mb:
+          type: float
+          description: "Максимальный размер файла (МБ, опционально)"
+        max_duration_seconds:
+          type: integer
+          description: "Максимальная длительность (секунды, опционально)"
+        check_exists:
+          type: boolean
+          description: "Проверять существование файла"
+      output:
+        type: dict
+        description: "Результат валидации с деталями"
+    get_file_extension:
+      description: "Определение расширения файла по содержимому"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу"
+      output:
+        type: dict
+        description: "Информация о расширении файла"
+    get_file_duration:
+      description: "Получение длительности файла (аудио/видео)"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу"
+      output:
+        type: dict
+        description: "Длительность и информация о файле"
+    get_content_type:
+      description: "Определение Content-Type (MIME-типа) файла"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу"
+      output:
+        type: dict
+        description: "Content-Type и метод определения"
+    get_audio_encoding:
+      description: "Определение audio_encoding"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу"
+      output:
+        type: dict
+        description: "Audio encoding и метод определения"
+    get_file_info:
+      description: "Универсальное определение информации о файле (расширение + MIME-тип)"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу"
+      output:
+        type: dict
+        description: "Полная информация о файле: extension, content_type, mime_type, detection_method"
+    download_file:
+      description: "Универсальное скачивание файлов через Bot API или MTProto"
+      input:
+        file_id:
+          type: string
+          description: "ID файла (Bot API или MTProto)"
+        target_folder:
+          type: string
+          description: "Папка для сохранения файла (относительно file_base_path, опционально)"
+        media_type:
+          type: string
+          description: "Тип медиа (photo, video, audio, document, etc., опционально)"
+        access_hash:
+          type: integer
+          description: "Хеш доступа для MTProto (опционально)"
+        file_reference:
+          type: bytes
+          description: "Ссылка на файл для MTProto (опционально)"
+        thumb_size:
+          type: string
+          description: "Размер фотографии для MTProto (s, m, x, y, z, опционально)"
+        download_type:
+          type: string
+          description: "Тип скачивания для MTProto (photo, document, опционально) - определяет какой InputFileLocation использовать"
+      output:
+        type: dict
+        description: "Результат скачивания с информацией о файле"
+    save_to_cache:
+      description: "Сохранение файла в кэш с метаданными"
+      input:
+        file_path:
+          type: string
+          description: "Путь к файлу для кэширования"
+        cache_key:
+          type: string
+          description: "Ключ кэша"
+        metadata:
+          type: dict
+          description: "Дополнительные метаданные для сохранения в кэш"
+      output:
+        type: boolean
+        description: "Успех операции сохранения в кэш"
+    get_from_cache:
+      description: "Получение данных из кэша по ключу"
+      input:
+        cache_key:
+          type: string
+          description: "Ключ кэша"
+      output:
+        type: dict
+        description: "Данные из кэша с метаданными и абсолютным путем к файлу"
+    delete_from_cache:
+      description: "Удаление записи из кэша по ключу"
+      input:
+        cache_key:
+          type: string
+          description: "Ключ кэша"
+      output:
+        type: boolean
+        description: "Успех операции удаления из кэша"
+
+features:
+  - "Чистая модульная архитектура с разделением ответственности"
+  - "Универсальная валидация файлов (аудио/видео)"
+  - "Автоматическое определение типа файла"
+  - "Определение расширений через MIME-типы"
+  - "Определение Content-Type для HTTP запросов"
+  - "Определение audio_encoding"
+  - "Универсальное скачивание файлов (Bot API + MTProto)"
+  - "Автоматическое определение API по формату file_id"
+  - "Явное управление типом скачивания для MTProto (download_type)"
+  - "Интеграция с системой кэширования для автоматической очистки"
+  - "Встроенная логика API без внешних адаптеров"
+  - "Централизованное управление файлами"
+  - "Гибкие настраиваемые параметры"
+  - "Детальная диагностика ошибок"
+  - "Определение реальных расширений файлов по содержимому"
+  - "Настраиваемая папка для скачивания файлов"
+  - "Поддержка относительных путей с автоматическим разрешением"
+  - "Универсальный метод get_file_info для получения полной информации о файле"
+  - "Оптимизированное кэширование с правильной работой путей (относительные в БД, абсолютные для использования)"
+  - "Публичные методы кэширования: save_to_cache, get_from_cache, delete_from_cache"
+  - "Универсальное кэширование файлов с метаданными для любых сервисов"

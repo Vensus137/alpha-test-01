@@ -1,0 +1,50 @@
+# Default пресет конфигурации
+# Этот пресет используется как fallback если указанный пресет не найден
+
+# === НАСТРОЙКИ СЕРВИСОВ С ТОКЕНАМИ ===
+
+tg_bot_initializer:
+  token: "${TELEGRAM_BOT_TOKEN}"  # Токен бота
+
+tg_mtproto:
+  api_id: "${MTPROTO_API_ID}"     # API ID
+  api_hash: "${MTPROTO_API_HASH}" # API Hash
+
+salute_speech:
+  auth_key: "${SALUTESPEECH_AUTH_KEY}"  # Ключ SaluteSpeech
+
+gigachat_service:
+  auth_key: "${GIGACHAT_AUTH_KEY}"  # Ключ GigaChat
+
+# === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
+
+global:
+  file_base_path: "resources"
+  ssl_certificates_path: "data/ssl_certificates"  # Путь к папке с SSL сертификатами
+  default_ssl_certificate: "russian_certs.pem"    # Дефолтный SSL сертификат
+  enable_global_placeholders: false
+
+# === НАСТРОЙКИ СЕРВИСОВ ===
+
+permission_manager:
+  roles: {}
+
+tg_command_registry:
+  commands: []
+  commands_clear:
+    chats: []
+    chat_members: []
+
+logger:
+  console_enabled: true
+  file_enabled: true
+
+tg_event_bot:
+  max_event_age_seconds: 0
+
+tg_event_mtproto:
+  enabled: false
+  allowed_chats: []
+
+
+

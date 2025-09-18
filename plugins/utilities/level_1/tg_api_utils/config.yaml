@@ -1,0 +1,95 @@
+name: "tg_api_utils"
+description: "Универсальная утилита для работы с API Telegram (ID чатов, пользователи, нормализация)"
+edition: "base"
+singleton: true
+dependencies:
+  - "logger"
+  - "database_service"
+optional_dependencies:
+  - "tg_mtproto"
+interface:
+  methods:
+    get_user_id_by_username:
+      description: "Получить user_id по username (без @). Возвращает null, если не найден"
+      input:
+        username:
+          type: string
+          description: "Логин пользователя, допускается с @ или без"
+      output:
+        type: integer|null
+        description: "user_id или null, если пользователь не найден"
+    add_or_update_user:
+      description: "Добавить или обновить пользователя с любыми полями"
+      input:
+        user_id:
+          type: integer
+          description: "Идентификатор пользователя"
+        username:
+          type: string|null
+          description: "Логин пользователя, допускается с @ или без (опционально)"
+        fields:
+          type: object
+          description: "Дополнительные поля для обновления (first_name, last_name, is_bot, last_activity и др.)"
+      output:
+        type: boolean
+        description: "True, если операция выполнена успешно"
+    normalize_entity_id:
+      description: "Нормализует ID entity в универсальный формат (Bot API формат)"
+      input:
+        entity_id:
+          type: integer
+          description: "ID entity в любом формате"
+        entity_type:
+          type: string|null
+          description: "Тип entity ('user', 'chat', 'channel') - опционально"
+      output:
+        type: integer
+        description: "Нормализованный ID в Bot API формате"
+    compare_entity_ids:
+      description: "Сравнивает два ID entity, приводя к универсальному формату"
+      input:
+        entity_id1:
+          type: integer|string
+          description: "Первый ID entity (любой тип)"
+        entity_id2:
+          type: integer|string
+          description: "Второй ID entity (любой тип)"
+        entity_type1:
+          type: string|null
+          description: "Тип первого entity ('user', 'chat', 'channel') - опционально"
+        entity_type2:
+          type: string|null
+          description: "Тип второго entity ('user', 'chat', 'channel') - опционально"
+      output:
+        type: boolean
+        description: "True если это один и тот же entity"
+    get_entity_id:
+      description: "Получает нормализованную информацию об объекте (ID + тип). Универсальный метод, автоматически определяющий тип объекта по его полям."
+      input:
+        obj:
+          type: object
+          description: "Любой объект (автоматически определяется тип по полям)"
+      output:
+        type: object|null
+        description: "Словарь с полями 'id' (нормализованный ID) и 'type' (user/chat/channel) или null"
+    create_peer_object:
+      description: "Создает готовый peer объект для MTProto API по ID и типу. Если тип неизвестен - умно определяет его автоматически"
+      input:
+        entity_id:
+          type: integer
+          description: "ID entity в любом формате"
+        entity_type:
+          type: string|null
+          description: "Тип entity: 'user', 'chat', 'channel' или null для автоопределения"
+      output:
+        type: object|null
+        description: "PeerUser, PeerChat, PeerChannel или null если не удалось создать"
+features:
+  - "Поиск пользователя по username в локальной базе"
+  - "Добавление/обновление пользователя по user_id и username"
+  - "Нормализация ID чатов между Bot API и MTProto форматами"
+  - "Сравнение ID entity в разных форматах"
+  - "Нормализация ID чата в универсальный формат"
+  - "Получение нормализованной информации об entity (ID + тип)"
+  - "Создание готовых peer объектов для MTProto API"
+  - "Умное автоопределение типа entity с проверкой кэша и последовательным тестированием"

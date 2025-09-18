@@ -1,0 +1,94 @@
+name: "tg_command_registry"
+description: "Сервис для регистрации команд Telegram Bot API при запуске приложения"
+edition: "base"
+singleton: true
+
+dependencies:
+  - "logger"
+  - "tg_bot_initializer"
+  - "settings_manager"
+
+settings:
+  commands:
+    type: array
+    default: []
+    description: "Список команд для регистрации в Telegram Bot API. Поддерживаются scope: default, all_private_chats, all_group_chats, chat, chat_member"
+    details: |
+      Структура команды:
+        - command: "start"                    # Название команды (обязательно)
+        - description: "Начать работу"        # Описание команды (обязательно)
+        - scope: "default"                    # Область видимости команды (обязательно)
+        - chat_id: 123456789                  # ID чата (только для scope: chat, chat_member)
+        - user_id: 987654321                  # ID пользователя (только для scope: chat_member)
+      
+      Типы scope:
+        - "default" - команда видна всем пользователям (по умолчанию)
+        - "all_private_chats" - команда видна только в личных чатах
+        - "all_group_chats" - команда видна только в групповых чатах
+        - "chat" - команда видна только в конкретном чате (требует chat_id)
+        - "chat_member" - команда видна только конкретному пользователю в конкретном чате (требует chat_id и user_id)
+      
+      Примеры команд:
+        - command: "start"
+          description: "Начать работу"
+          scope: "default"
+        
+        - command: "help"
+          description: "Справка"
+          scope: "all_private_chats"
+        
+        - command: "admin"
+          description: "Админ-панель"
+          scope: "chat_member"
+          chat_id: 123456789
+          user_id: 987654321
+      
+      Порядок регистрации команд:
+        1. Сначала очищаются все команды для всех scope
+        2. Затем очищаются команды из commands_clear
+        3. После этого регистрируются новые команды из commands
+
+  commands_clear:
+    type: object
+    default: {}
+    description: "Настройки очистки команд для конкретных чатов и пользователей. Содержит chats (список чатов) и chat_members (список пользователей в чатах)"
+    details: |
+      Структура commands_clear:
+        chats: []                    # Список чатов для очистки команд (scope: chat)
+        chat_members: []             # Список пользователей в чатах для очистки команд (scope: chat_member)
+      
+      Структура элемента chats:
+        - chat_id: 123456789         # ID чата для очистки команд
+      
+      Структура элемента chat_members:
+        - chat_id: 123456789         # ID чата (обязательно)
+        - user_id: 987654321         # ID пользователя в чате (обязательно)
+      
+      Примеры использования:
+        # Очистка команд для конкретных чатов
+        chats:
+          - chat_id: 123456789
+          - chat_id: 987654321
+      
+        # Очистка команд для конкретных пользователей в чатах
+        chat_members:
+          - chat_id: 123456789
+            user_id: 111222333
+          - chat_id: 987654321
+            user_id: 444555666
+      
+      Когда использовать:
+        - При удалении команды из конфигурации, но она осталась в кэше Telegram клиентов
+        - При изменении scope команды с chat/chat_member на другой тип
+        - При необходимости принудительной очистки "залипших" команд
+      
+      Рекомендации:
+        - Добавляйте ID чатов/пользователей в commands_clear при необходимости очистки
+        - Перезапустите бота для применения очистки
+        - Удалите записи из commands_clear после успешной очистки
+
+features:
+  - "Регистрация команд в Telegram через Bot API при запуске"
+  - "Получение команд из настроек плагина через settings_manager"
+  - "Поддержка различных scope для команд"
+  - "Очистка команд для конкретных чатов и пользователей" 

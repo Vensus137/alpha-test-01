@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..                    # Контекст сборки - корень проекта
+      dockerfile: docker/Dockerfile  # Путь к Dockerfile
+    container_name: coreness
+    volumes:
+      - ../:/app                     # Монтируем весь проект
+    restart: unless-stopped

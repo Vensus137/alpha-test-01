@@ -1,0 +1,31 @@
+name: "trigger_processing"
+description: "Сервис для обработки триггеров: поиск сценария по событию (text/callback/new_member). Включает проверку состояний пользователей с ленивой очисткой. Поддерживает множественные триггеры и универсальные обработчики."
+edition: "base"
+
+dependencies:
+  - "logger"
+  - "settings_manager"
+  - "scenarios_manager"
+  - "tg_button_mapper"
+  - "database_service"
+  - "datetime_formatter"
+  - "tg_api_utils"
+
+interface:
+  methods:
+    find_all_scenarios_by_event:
+      description: "Поиск всех сценариев по событию с поддержкой множественных триггеров"
+      input:
+        event:
+          type: dict
+          description: "Событие с полями source_type, event_text, user_id, chat_id и др."
+      output:
+        type: array
+        description: "Список всех найденных сценариев"
+
+features:
+  - "Единая логика поиска сценария по триггеру для всех сервисов проекта"
+  - "Поддержка множественных триггеров и универсальных обработчиков"
+  - "Фильтрация по типам чатов (group/private) и конкретным ID"
+  - "Обратная совместимость со старым форматом триггеров"
+  - "Фильтрация сообщений от ботов через bot_enabled" 
