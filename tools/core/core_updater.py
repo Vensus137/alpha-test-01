@@ -6,24 +6,50 @@ import sys
 import platform
 import shutil
 import subprocess
-import tempfile
-import zipfile
-import datetime
 import time
 from pathlib import Path
 
-# Настраиваем кодировку для Windows
-if sys.platform == "win32":
-    import io
+# ОТКЛЮЧАЕМ БУФЕРИЗАЦИЮ ДЛЯ РЕАЛЬНОГО ВРЕМЕНИ
+if hasattr(sys.stdout, 'reconfigure'):
+    # Python 3.7+
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+else:
+    # Старые версии Python
+    sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 1)  # line buffered
+    sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 1)
+
+# Настраиваем кодировку для всех платформ
+import io
+import locale
+
+try:
+    # Устанавливаем переменные окружения для UTF-8
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    os.environ['LC_ALL'] = 'C.UTF-8'
+    os.environ['LANG'] = 'C.UTF-8'
+    
+    # Пытаемся установить локаль UTF-8
     try:
-        # Устанавливаем переменные окружения для UTF-8
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+        except:
+            pass
+    
+    # Пересоздаем потоки с UTF-8
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdin, 'buffer'):
+        sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
         
-        # Пересоздаем stdout/stderr с UTF-8
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-    except Exception:
-        pass  # Игнорируем ошибки настройки кодировки
+except Exception as e:
+    # Если ничего не работает, пробуем установить только переменные окружения
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    pass
 
 # === ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ ===
 # Настройки репозиториев для разных версий
@@ -116,6 +142,129 @@ def load_config():
         'non_critical_paths': NON_CRITICAL_PATHS
     }
 
+def check_and_install_dependencies():
+    """Проверяет и устанавливает необходимые зависимости для обновления"""
+    print(f"{Colors.YELLOW}🔍 Проверяю зависимости для обновления...{Colors.END}")
+    
+    # Минимальный набор зависимостей для core_updater
+    required_packages = [
+        'requests',  # Для скачивания с GitHub
+        'zipfile',   # Встроенный модуль Python
+        'tempfile',  # Встроенный модуль Python
+        'shutil',    # Встроенный модуль Python
+        'subprocess' # Встроенный модуль Python
+    ]
+    
+    missing_packages = []
+    
+    # Проверяем каждый пакет
+    for package in required_packages:
+        try:
+            if package in ['zipfile', 'tempfile', 'shutil', 'subprocess']:
+                # Встроенные модули Python
+                __import__(package)
+                print(f"{Colors.GREEN}✅ {package} (встроенный модуль){Colors.END}")
+            else:
+                # Внешние пакеты
+                __import__(package)
+                print(f"{Colors.GREEN}✅ {package} (установлен){Colors.END}")
+        except ImportError:
+            if package not in ['zipfile', 'tempfile', 'shutil', 'subprocess']:
+                missing_packages.append(package)
+                print(f"{Colors.RED}❌ {package} (не найден){Colors.END}")
+    
+    # Если запущено в контейнере, все зависимости должны быть
+    if is_running_in_container():
+        if missing_packages:
+            print(f"{Colors.RED}❌ В контейнере отсутствуют зависимости: {', '.join(missing_packages)}{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Пересоберите Docker образ: docker compose build{Colors.END}")
+            return False
+        else:
+            print(f"{Colors.GREEN}✅ Все зависимости доступны в контейнере!{Colors.END}")
+            return True
+    
+    # Устанавливаем недостающие пакеты только на хосте
+    if missing_packages:
+        print(f"{Colors.YELLOW}📦 Устанавливаю недостающие пакеты: {', '.join(missing_packages)}{Colors.END}")
+        
+        # Сначала проверяем и устанавливаем pip если его нет
+        print(f"{Colors.CYAN}🔄 Проверяю pip...{Colors.END}")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "--version"], 
+                         capture_output=True, text=True, check=True)
+            print(f"{Colors.GREEN}✅ pip доступен{Colors.END}")
+        except:
+            print(f"{Colors.YELLOW}⚠️ pip не найден, устанавливаю...{Colors.END}")
+            try:
+                # Устанавливаем pip через get-pip.py
+                subprocess.run([
+                    sys.executable, "-c", 
+                    "import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')"
+                ], check=True)
+                subprocess.run([sys.executable, "get-pip.py"], check=True)
+                subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+                print(f"{Colors.GREEN}✅ pip установлен{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.RED}❌ Не удалось установить pip: {e}{Colors.END}")
+                print(f"{Colors.YELLOW}💡 Установите pip вручную: curl https://bootstrap.pypa.io/get-pip.py | python3{Colors.END}")
+                return False
+        
+        try:
+            for package in missing_packages:
+                print(f"{Colors.CYAN}💡 Устанавливаю {package}...{Colors.END}")
+                
+                # Пробуем установить с выводом ошибок
+                result = subprocess.run([
+                    sys.executable, "-m", "pip", "install", package
+                ], capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    print(f"{Colors.GREEN}✅ {package} установлен{Colors.END}")
+                else:
+                    print(f"{Colors.RED}❌ Ошибка установки {package}:{Colors.END}")
+                    print(f"{Colors.RED}   stdout: {result.stdout}{Colors.END}")
+                    print(f"{Colors.RED}   stderr: {result.stderr}{Colors.END}")
+                    
+                    # Пробуем альтернативные способы
+                    print(f"{Colors.YELLOW}🔄 Пробую альтернативные способы...{Colors.END}")
+                    
+                    # Способ 1: pip3 вместо python -m pip
+                    result2 = subprocess.run([
+                        "pip3", "install", package
+                    ], capture_output=True, text=True)
+                    
+                    if result2.returncode == 0:
+                        print(f"{Colors.GREEN}✅ {package} установлен через pip3{Colors.END}")
+                    else:
+                        # Способ 2: apt-get для системных пакетов
+                        if package == "requests":
+                            print(f"{Colors.YELLOW}🔄 Пробую установить через apt-get...{Colors.END}")
+                            result3 = subprocess.run([
+                                "apt-get", "update"
+                            ], capture_output=True, text=True)
+                            
+                            result4 = subprocess.run([
+                                "apt-get", "install", "-y", "python3-requests"
+                            ], capture_output=True, text=True)
+                            
+                            if result4.returncode == 0:
+                                print(f"{Colors.GREEN}✅ {package} установлен через apt-get{Colors.END}")
+                            else:
+                                print(f"{Colors.RED}❌ Все способы установки {package} не сработали{Colors.END}")
+                                print(f"{Colors.YELLOW}💡 Установите вручную: pip install {package}{Colors.END}")
+                                return False
+            
+            print(f"{Colors.GREEN}🎉 Все зависимости установлены!{Colors.END}")
+            return True
+            
+        except Exception as e:
+            print(f"{Colors.RED}❌ Критическая ошибка установки зависимостей: {e}{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Установите вручную: pip install {' '.join(missing_packages)}{Colors.END}")
+            return False
+    else:
+        print(f"{Colors.GREEN}✅ Все зависимости уже установлены!{Colors.END}")
+        return True
+
 def print_header():
     print(f"{Colors.BLUE}{Colors.BOLD}================================{Colors.END}")
     print(f"{Colors.BLUE}{Colors.BOLD}      CORENESS UPDATER          {Colors.END}")
@@ -202,16 +351,16 @@ def install_docker():
             ], check=True)
             
             # Добавляем GPG ключ Docker
-            subprocess.run([
-                'curl', '-fsSL', 'https://download.docker.com/linux/ubuntu/gpg', 
-                '|', 'sudo', 'gpg', '--dearmor', '-o', '/usr/share/keyrings/docker-archive-keyring.gpg'
-            ], shell=True, check=True)
+            subprocess.run(
+                'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg',
+                shell=True, check=True
+            )
             
             # Добавляем репозиторий Docker
-            subprocess.run([
-                'echo', '"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"',
-                '|', 'sudo', 'tee', '/etc/apt/sources.list.d/docker.list'
-            ], shell=True, check=True)
+            subprocess.run(
+                'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list',
+                shell=True, check=True
+            )
             
             # Обновляем пакеты и устанавливаем Docker
             subprocess.run(['sudo', 'apt', 'update'], check=True)
@@ -395,9 +544,10 @@ def start_docker_engine():
 def is_container_running():
     """Проверяет, запущен ли контейнер"""
     try:
+        # Проверяем контейнер напрямую через docker ps
         result = subprocess.run([
-            "docker-compose", "ps", "-q", "coreness"
-        ], capture_output=True, text=True, cwd="docker")
+            "docker", "ps", "-q", "--filter", "name=coreness"
+        ], capture_output=True, text=True)
         return bool(result.stdout.strip())
     except:
         return False
@@ -405,7 +555,7 @@ def is_container_running():
 def start_container():
     """Запускает контейнер"""
     print(f"{Colors.YELLOW}🚀 Запускаю контейнер...{Colors.END}")
-    subprocess.run(["docker-compose", "up", "-d"], check=True, cwd="docker")
+    subprocess.run(["docker", "compose", "up", "-d"], check=True, cwd="docker")
     print(f"{Colors.GREEN}✅ Контейнер запущен!{Colors.END}")
 
 def build_and_run_container():
@@ -451,11 +601,11 @@ def build_and_run_container():
         
         # Собираем образ
         print(f"{Colors.CYAN}💡 Собираем Docker образ...{Colors.END}")
-        subprocess.run(['docker-compose', 'build'], check=True)
+        subprocess.run(['docker', 'compose', 'build'], check=True)
         
         # Запускаем контейнер
         print(f"{Colors.CYAN}💡 Запускаем Docker контейнер...{Colors.END}")
-        subprocess.run(['docker-compose', 'up', '-d'], check=True)
+        subprocess.run(['docker', 'compose', 'up', '-d'], check=True)
         
         # Возвращаемся в корневую папку
         os.chdir('..')
@@ -482,7 +632,7 @@ def run_database_migration():
         try:
             # Простой запуск без перехвата вывода - логи идут сразу
             result = subprocess.run([
-                "docker-compose", "exec", "coreness", 
+                "docker", "compose", "exec", "coreness", 
                 "python", "-u", "tools/database_manager.py", "--all", "--migrate"
             ], cwd="docker", timeout=300)  # 5 минут таймаут
             
@@ -494,7 +644,7 @@ def run_database_migration():
                 
         except subprocess.TimeoutExpired:
             print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
-            print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker-compose logs -f coreness{Colors.END}")
+            print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker compose logs -f coreness{Colors.END}")
         except Exception as e:
             print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         
@@ -511,7 +661,7 @@ def run_database_migration():
             try:
                 # Простой запуск без перехвата вывода - логи идут сразу
                 result = subprocess.run([
-                    "python", "-u", migration_script, "--all", "--migrate"
+                    sys.executable, "-u", migration_script, "--all", "--migrate"
                 ], timeout=300)  # 5 минут таймаут
                 
                 if result.returncode == 0:
@@ -528,6 +678,10 @@ def run_database_migration():
         else:
             print(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}")
             print(f"{Colors.YELLOW}💡 Миграция пропущена{Colors.END}")
+
+def is_running_in_container():
+    """Проверяет, запущен ли скрипт внутри Docker контейнера"""
+    return os.path.exists("/.dockerenv")
 
 def remove_installer_script():
     """Удаляет скрипт установки из корня проекта (этап 3)"""
@@ -577,8 +731,12 @@ def run_initial_setup():
         return
     
     print(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Текущая папка станет корневой для Coreness.{Colors.END}")
-    confirm = input("Вы уверены, что хотите продолжить первичную установку? (y/N): ")
-    if confirm.lower() != 'y':
+    confirm = safe_input("Вы уверены, что хотите продолжить первичную установку? (y/N): ")
+    
+    # Очищаем ввод от лишних символов
+    confirm = confirm.strip().lower()
+    
+    if confirm != 'y':
         print(f"{Colors.RED}❌ Установка отменена.{Colors.END}")
         return
     
@@ -610,7 +768,34 @@ def run_initial_setup():
     print(f"{Colors.CYAN}💡 Теперь переходим к этапу обновления...{Colors.END}")
     
     # Переходим к этапу обновления
-    run_core_update()
+    print(f"{Colors.CYAN}💡 Определяю способ обновления...{Colors.END}")
+    
+    # Проверяем, доступен ли контейнер
+    if is_docker_running() and is_container_running():
+        print(f"{Colors.CYAN}🐳 Контейнер доступен, запускаю обновление в Docker...{Colors.END}")
+        try:
+            # Определяем правильную папку для docker-compose
+            docker_dir = "docker" if os.path.exists("docker/docker-compose.yml") else "."
+            print(f"{Colors.CYAN}📁 Запускаю из папки: {docker_dir}{Colors.END}")
+            
+            result = subprocess.run([
+                "docker", "compose", "exec", "coreness", 
+                "python", "core_updater.py"
+            ], cwd=docker_dir)
+            
+            if result.returncode == 0:
+                print(f"{Colors.GREEN}✅ Обновление завершено успешно в контейнере!{Colors.END}")
+            else:
+                print(f"{Colors.RED}❌ Обновление в контейнере завершилось с ошибкой{Colors.END}")
+                print(f"{Colors.YELLOW}💡 Fallback: запускаю обновление на хосте...{Colors.END}")
+                run_core_update()
+        except Exception as e:
+            print(f"{Colors.RED}❌ Ошибка запуска обновления в контейнере: {e}{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Fallback: запускаю обновление на хосте...{Colors.END}")
+            run_core_update()
+    else:
+        print(f"{Colors.CYAN}🖥 Контейнер недоступен, запускаю обновление на хосте...{Colors.END}")
+        run_core_update()
 
 def get_available_versions(config):
     """Возвращает список доступных версий"""
@@ -637,12 +822,30 @@ def get_github_token(version_info):
         return None
     return token
 
+def safe_input(prompt):
+    """Безопасный ввод с обработкой кодировки"""
+    try:
+        result = input(prompt)
+        # Очищаем результат от лишних символов
+        return result.strip()
+    except UnicodeDecodeError:
+        # Если кодировка не работает, пробуем альтернативный способ
+        print("Введите ответ (используйте английские буквы):")
+        try:
+            result = input("> ")
+            return result.strip()
+        except:
+            return ""
+    except Exception as e:
+        print(f"Ошибка ввода: {e}")
+        return ""
+
 def request_manual_token():
     """Запрашивает токен вручную"""
     print(f"\n{Colors.YELLOW}🔑 Введите GitHub токен:{Colors.END}")
     
     while True:
-        token = input("GitHub токен: ").strip()
+        token = safe_input("GitHub токен: ").strip()
         if token:
             return token
         print(f"{Colors.RED}❌ Токен не может быть пустым. Попробуйте снова.{Colors.END}")
@@ -814,18 +1017,27 @@ def restore_backup(backup_dir, project_root, config):
             
             print(f"{Colors.CYAN}🔄 Восстанавливаю: {item}{Colors.END}")
             
-            # Удаляем существующий файл/папку
+            # ЭТАП 1: Пробуем удалить существующий файл/папку (не критично если не удалось)
             if os.path.exists(target_path):
-                remove_old(target_path, config)
+                try:
+                    if os.path.isdir(target_path):
+                        shutil.rmtree(target_path)
+                    else:
+                        os.remove(target_path)
+                    print(f"{Colors.YELLOW}🗑 Удален: {item}{Colors.END}")
+                except Exception as e:
+                    print(f"{Colors.YELLOW}⚠️ Не удалось удалить {item}: {e}{Colors.END}")
+                    print(f"{Colors.CYAN}💡 Продолжаю копирование...{Colors.END}")
             
-            # Восстанавливаем из бэкапа
+            # ЭТАП 2: Копируем из бэкапа (всегда пробуем)
             if os.path.isdir(backup_path):
-                shutil.copytree(backup_path, target_path)
+                shutil.copytree(backup_path, target_path, dirs_exist_ok=True)
             else:
                 shutil.copy2(backup_path, target_path)
+            print(f"{Colors.GREEN}✅ Восстановлен: {item}{Colors.END}")
                 
         except Exception as e:
-            print(f"{Colors.RED}❌ Ошибка восстановления {item}: {e}{Colors.END}")
+            print(f"{Colors.RED}❌ Не удалось восстановить {item}: {e}{Colors.END}")
             errors.append(item)
     
     return errors
@@ -947,6 +1159,13 @@ def run_core_update():
     print(f"{Colors.CYAN}📁 Корневая папка проекта: {project_root}{Colors.END}")
     print(f"{Colors.CYAN}📁 Скрипт запущен из: {script_dir}{Colors.END}")
     
+    # Проверяем, запущен ли скрипт в контейнере
+    if is_running_in_container():
+        print(f"{Colors.CYAN}🐳 Обновление запущено в Docker контейнере{Colors.END}")
+        print(f"{Colors.GREEN}✅ Все зависимости доступны, обновление безопасно{Colors.END}")
+    else:
+        print(f"{Colors.CYAN}🖥 Обновление запущено на хосте{Colors.END}")
+    
     # Проверяем, запущен ли скрипт из корня проекта
     # Если скрипт запущен с параметром --update, значит он уже в корне
     if script_dir != project_root and "--update" not in sys.argv:
@@ -966,6 +1185,12 @@ def run_core_update():
             
             # Запускаем новый процесс с параметром "update"
             print(f"{Colors.CYAN}🚀 Запускаю обновление из корня проекта...{Colors.END}")
+            
+            # Принудительно очищаем буферы перед запуском нового процесса
+            sys.stdout.flush()
+            sys.stderr.flush()
+            time.sleep(0.1)  # Небольшая задержка для синхронизации
+            
             result = subprocess.run([sys.executable, root_script_path, "--update"], cwd=project_root)
             
             # Проверяем результат
@@ -985,6 +1210,17 @@ def run_core_update():
     # ЭТАП 2: Обновление (запущено из корня проекта)
     print(f"{Colors.CYAN}🧠 Этап 2: Обновление из корня проекта{Colors.END}")
     
+    # Принудительно очищаем буферы в новом процессе
+    sys.stdout.flush()
+    sys.stderr.flush()
+    time.sleep(0.1)  # Небольшая задержка для синхронизации
+    
+    # Проверяем и устанавливаем зависимости
+    print(f"\n{Colors.BLUE}=== ЭТАП: Проверка зависимостей ==={Colors.END}")
+    if not check_and_install_dependencies():
+        print(f"{Colors.RED}❌ Не удалось установить зависимости. Обновление отменено.{Colors.END}")
+        return
+    
     # Загружаем конфигурацию
     config = load_config()
     
@@ -997,7 +1233,7 @@ def run_core_update():
     
     # Запрашиваем версию
     while True:
-        selected_version = input(f"\n{Colors.YELLOW}Введите версию для обновления ({', '.join(available_versions)}): {Colors.END}").strip().lower()
+        selected_version = safe_input(f"\n{Colors.YELLOW}Введите версию для обновления ({', '.join(available_versions)}): {Colors.END}").strip().lower()
         if validate_version(selected_version, config):
             break
         print(f"{Colors.RED}❌ Неверная версия. Доступные: {', '.join(available_versions)}{Colors.END}")
@@ -1006,7 +1242,7 @@ def run_core_update():
     print(f"\n{Colors.GREEN}✅ Выбрана версия: {version_info['name']} ({version_info['description']}){Colors.END}")
     
     # Запрашиваем обновление заводских конфигов
-    update_factory_configs = input(f"\n{Colors.YELLOW}Обновить заводские конфиги (config, resources)? (Y/N, по умолчанию N): {Colors.END}").strip().lower() == 'y'
+    update_factory_configs = safe_input(f"\n{Colors.YELLOW}Обновить заводские конфиги (config, resources)? (Y/N, по умолчанию N): {Colors.END}").strip().lower() == 'y'
     
     if update_factory_configs:
         print(f"{Colors.YELLOW}🛠 Включено обновление заводских конфигов!{Colors.END}")
@@ -1036,7 +1272,7 @@ def run_core_update():
         run_database_migration()
         
         # Спрашиваем про удаление бэкапа
-        keep_backup = input(f"\n{Colors.YELLOW}Удалить резервную копию? (Y/N, по умолчанию N): {Colors.END}").strip().lower() == 'y'
+        keep_backup = safe_input(f"\n{Colors.YELLOW}Удалить резервную копию? (Y/N, по умолчанию N): {Colors.END}").strip().lower() == 'y'
         if keep_backup:
             shutil.rmtree(backup_dir)
             print(f"{Colors.GREEN}🗑 Резервная копия удалена.{Colors.END}")
@@ -1049,10 +1285,6 @@ def run_core_update():
         print(f"{Colors.CYAN}   ✅ База данных мигрирована{Colors.END}")
         print(f"{Colors.CYAN}   ✅ Проект готов к работе{Colors.END}")
         
-        # Удаляем скрипт установки, если это была первичная установка
-        print(f"\n{Colors.BLUE}=== ЭТАП: Очистка ==={Colors.END}")
-        remove_installer_script()
-        
     except Exception as e:
         print(f"{Colors.RED}❌ Ошибка обновления: {e}{Colors.END}")
         print(f"{Colors.YELLOW}⏪ Восстанавливаю из резервной копии...{Colors.END}")
@@ -1064,6 +1296,11 @@ def run_core_update():
         else:
             print(f"{Colors.GREEN}✅ Откат завершён. Проект восстановлен.{Colors.END}")
             print(f"{Colors.CYAN}💾 Резервная копия сохранена в {backup_dir}{Colors.END}")
+    
+    finally:
+        # Удаляем скрипт установки ВСЕГДА (независимо от результата)
+        print(f"\n{Colors.BLUE}=== ЭТАП: Очистка ==={Colors.END}")
+        remove_installer_script()
 
 def main_menu():
     print_header()
@@ -1081,11 +1318,11 @@ def main_menu():
         print("3) Выход")
         
         while True:
-            choice = input("Введите номер (1-3): ")
+            choice = safe_input("Введите номер (1-3): ")
             if choice == '1':
                 print(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Вы выбрали первичную установку из папки tools/core!{Colors.END}")
                 print(f"{Colors.YELLOW}   Это может привести к неожиданным результатам.{Colors.END}")
-                confirm = input("Вы уверены, что хотите продолжить? (y/N): ")
+                confirm = safe_input("Вы уверены, что хотите продолжить? (y/N): ")
                 if confirm.lower() == 'y':
                     run_initial_setup()
                 break
@@ -1103,14 +1340,14 @@ def main_menu():
         print("3) Выход")
         
         while True:
-            choice = input("Введите номер (1-3): ")
+            choice = safe_input("Введите номер (1-3): ")
             if choice == '1':
                 run_initial_setup()
                 break
             elif choice == '2':
                 print(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Вы выбрали обновление ядра не из папки tools/core!{Colors.END}")
                 print(f"{Colors.YELLOW}   Это может привести к неожиданным результатам.{Colors.END}")
-                confirm = input("Вы уверены, что хотите продолжить? (y/N): ")
+                confirm = safe_input("Вы уверены, что хотите продолжить? (y/N): ")
                 if confirm.lower() == 'y':
                     run_core_update()
                 break
