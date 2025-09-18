@@ -1,0 +1,42 @@
+name: "tg_bot_initializer"
+description: "Утилита для централизованной инициализации Telegram Bot API"
+edition: "base"
+singleton: true
+
+dependencies:
+  - "logger"
+  - "settings_manager"
+
+settings:
+  token:
+    type: string
+    default: "${TELEGRAM_BOT_TOKEN}"
+    description: "Токен Telegram бота (получите у @BotFather)"
+
+interface:
+  methods:
+    get_bot:
+      description: "Получить экземпляр инициализированного бота"
+      output:
+        type: object
+        description: "Экземпляр aiogram.Bot"
+    get_token:
+      description: "Получить токен бота"
+      output:
+        type: string
+        description: "Токен Telegram бота"
+    is_initialized:
+      description: "Проверить, инициализирован ли бот"
+      output:
+        type: boolean
+        description: "True если бот инициализирован"
+
+features:
+  - "Централизованная инициализация Telegram бота"
+  - "Получение токена из переменной окружения TELEGRAM_BOT_TOKEN"
+  - "Singleton экземпляр бота"
+  - "Передача бота как зависимости через DI"
+
+notes: |
+  Токен бота можно задать через переменную окружения TELEGRAM_BOT_TOKEN или через глобальные настройки.
+  Пример переменной окружения: export TELEGRAM_BOT_TOKEN="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"

@@ -1,0 +1,18 @@
+# Глобальные настройки для всех пресетов
+
+# === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
+
+global:
+  active_preset: "test"  # Текущий активный пресет
+  file_base_path: "resources"     
+  ssl_certificates_path: "data/ssl_certificates"  # Путь к папке с SSL сертификатами
+  default_ssl_certificate: "russian_certs.pem"    # Дефолтный SSL сертификат
+
+# === НАСТРОЙКИ СЕРВИСОВ ===
+
+logger:
+  console_enabled: true
+  file_enabled: true
+
+tg_event_bot:
+  max_event_age_seconds: 0

@@ -1,0 +1,27 @@
+# Default пресет триггеров
+# Этот пресет используется как fallback если указанный пресет не найден
+
+text:
+  "*": []
+  
+  exact:
+    "/start": "command.start"
+    "/help": "command.help"
+  
+  state: {}
+  regex: {}
+  starts_with: {}
+  contains: {}
+
+callback:
+  exact:
+    "Меню": "start"
+    "Назад": "start"
+  contains: {}
+
+new_member:
+  group: {}
+  link: {}
+  creator: {}
+  initiator: {}
+  default: {}

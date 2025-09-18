@@ -1,0 +1,32 @@
+name: "action_parser"
+description: "Универсальный парсер действия из базы данных"
+edition: "base"
+
+dependencies:
+  - "logger"
+  - "datetime_formatter"
+
+interface:
+  methods:
+    parse_action:
+      description: "Объединяет данные из всех источников в плоский dict с правильным приоритетом, обрабатывает временные атрибуты"
+      input:
+        action:
+          type: dict
+          description: "Действие из базы данных с полями event_data, action_data, prev_data, placeholder_data, response_data и др."
+      output:
+        type: dict
+        description: "Плоский dict с объединенными данными и обработанными временными атрибутами"
+features:
+  - "Объединение данных из всех источников с правильным приоритетом: prev_data < action_data < placeholder_data < response_data < event_data < основные поля"
+  - "Разворачивание prev_data, action_data, placeholder_data, response_data, event_data в плоский словарь"
+  - "Приоритет event_data над response_data при конфликтах"
+  - "Приоритет response_data над placeholder_data при конфликтах"
+  - "Приоритет placeholder_data над action_data при конфликтах"
+  - "Приоритет action_data над prev_data при конфликтах"
+  - "Удаление раскрытых полей (event_data, action_data, prev_data, placeholder_data, response_data) из результата"
+  - "Обработка временных атрибутов (expire, unexpired, duration, time_before, time_after) → _seconds и _date версии"
+  - "Парсинг временных строк (1w 5d 4h 30m 15s) в секунды с поддержкой недель"
+  - "Автоматическое создание _date атрибутов от времени события (локальное время)"
+  - "Приоритет явно указанных _date атрибутов над автоматическими"
+  - "Используется всеми сервисами для получения 'плоского' action" 

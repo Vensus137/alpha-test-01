@@ -1,0 +1,27 @@
+name: "tg_media_group_merger"
+description: "Утилита для объединения событий медиа-групп Telegram в единое событие с объединенными вложениями"
+edition: "base"
+singleton: true
+dependencies:
+  - "logger"
+
+interface:
+  merge_group_events:
+    description: "Объединяет список событий медиа-группы в одно событие"
+    input:
+      events:
+        type: list
+        description: "Список событий для объединения"
+      group_field:
+        type: string
+        description: "Поле для идентификации группы (media_group_id или grouped_id)"
+        default: "media_group_id"
+    output:
+      type: object
+      description: "Объединенное событие или None если список пустой"
+
+features:
+  - "Объединение вложений из всех событий группы"
+  - "Проверка консистентности user_id и chat_id"
+  - "Сохранение текста из первого события с текстом"
+  - "Поддержка разных полей группировки (media_group_id, grouped_id)"

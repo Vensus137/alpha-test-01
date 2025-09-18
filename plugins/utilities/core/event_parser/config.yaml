@@ -1,0 +1,62 @@
+name: "event_parser"
+description: "Фасад для универсального парсинга событий Telegram Bot API и MTProto в стандартный формат событий"
+edition: "base"
+dependencies:
+  - "logger"
+  - "datetime_formatter"
+  - "data_converter"
+  - "tg_api_utils"
+optional_dependencies:
+  - "tg_entities_parser"
+interface:
+  methods:
+    parse_bot_api_message:
+      description: "Парсинг сообщения Telegram Bot API (aiogram) в стандартный формат события"
+      input:
+        message:
+          type: object
+          description: "Объект сообщения aiogram.types.Message"
+        media_group_processor:
+          type: object
+          description: "Процессор медиа-групп (опционально)"
+      output:
+        type: object
+        description: "Словарь с данными события в стандартном формате"
+    parse_mtproto_message:
+      description: "Парсинг сообщения Telegram MTProto (Telethon) в стандартный формат события"
+      input:
+        message:
+          type: object
+          description: "Объект сообщения Telethon"
+        event:
+          type: object
+          description: "Объект события Telethon"
+      output:
+        type: object
+        description: "Словарь с данными события в стандартном формате"
+    parse_bot_api_callback:
+      description: "Парсинг callback Telegram Bot API в стандартный формат события"
+      input:
+        callback:
+          type: object
+          description: "Объект callback aiogram.types.CallbackQuery"
+      output:
+        type: object
+        description: "Словарь с данными события в стандартном формате"
+    parse_bot_api_new_member:
+      description: "Парсинг события новых участников Telegram Bot API в стандартный формат события"
+      input:
+        message:
+          type: object
+          description: "Объект сообщения aiogram.types.Message с new_chat_members"
+      output:
+        type: object
+        description: "Словарь с данными события в стандартном формате"
+features:
+  - "Модульная архитектура: tg_bot_parser.py и tg_mtproto_parser.py"
+  - "Фасад-паттерн для единого интерфейса"
+  - "Только парсинг данных, без бизнес-логики"
+  - "Полная совместимость с существующими событиями"
+  - "Обработка всех типов сообщений (текст, медиа, reply, forward)"
+  - "Извлечение вложений и метаданных"
+  - "Нормализация данных для единого формата"
