@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import zipfile
 import datetime
+import time
 from pathlib import Path
 
 # === ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ ===
@@ -155,6 +156,11 @@ def install_docker():
     import platform
     import subprocess
     
+    # Сначала проверяем, не установлен ли уже Docker
+    if is_docker_running():
+        print(f"{Colors.GREEN}✅ Docker уже установлен и работает!{Colors.END}")
+        return True
+    
     system = platform.system().lower()
     print(f"{Colors.YELLOW}🔧 Определена система: {system}{Colors.END}")
     
@@ -242,26 +248,9 @@ def install_docker():
             print(f"{Colors.RED}❌ Homebrew не найден! Установите Homebrew или Docker Desktop вручную.{Colors.END}")
             return False
     elif system == "windows":
-        print(f"{Colors.YELLOW}📦 Устанавливаем Docker Engine для Windows...{Colors.END}")
-        print(f"{Colors.CYAN}💡 Рекомендуем использовать WSL2 + Docker Engine{Colors.END}")
-        
-        try:
-            # Проверяем наличие WSL2
-            subprocess.run(['wsl', '--version'], check=True, capture_output=True)
-            print(f"{Colors.CYAN}💡 WSL2 найден, устанавливаем Docker Engine в WSL2...{Colors.END}")
-            
-            # Устанавливаем Docker Engine в WSL2
-            subprocess.run(['wsl', 'sudo', 'apt', 'update'], check=True)
-            subprocess.run(['wsl', 'sudo', 'apt', 'install', '-y', 'docker.io'], check=True)
-            subprocess.run(['wsl', 'sudo', 'systemctl', 'start', 'docker'], check=True)
-            subprocess.run(['wsl', 'sudo', 'systemctl', 'enable', 'docker'], check=True)
-            
-            print(f"{Colors.GREEN}✅ Docker Engine установлен в WSL2!{Colors.END}")
-            print(f"{Colors.YELLOW}⚠️ Docker Engine работает в WSL2 окружении{Colors.END}")
-            
-        except subprocess.CalledProcessError:
-            print(f"{Colors.RED}❌ WSL2 не найден! Установите WSL2 или Docker Desktop вручную.{Colors.END}")
-            return False
+        print(f"{Colors.YELLOW}⚠️ Windows: Docker не будет установлен автоматически{Colors.END}")
+        print(f"{Colors.CYAN}💡 Настройте Docker самостоятельно при необходимости{Colors.END}")
+        return False
     else:
         print(f"{Colors.RED}❌ Неподдерживаемая операционная система: {system}{Colors.END}")
         return False
@@ -333,8 +322,9 @@ def download_docker_config():
         return False
 
 def is_docker_running():
-    """Проверяет, запущен ли Docker daemon"""
+    """Проверяет, установлен ли Docker и работает ли он"""
     try:
+        # Проверяем не только версию, но и подключение к daemon
         subprocess.run(['docker', 'info'], capture_output=True, check=True)
         return True
     except:
@@ -346,20 +336,9 @@ def start_docker_engine():
         system = platform.system()
         
         if system == "Windows":
-            print(f"{Colors.CYAN}💡 Запускаем Docker Engine на Windows...{Colors.END}")
-            # На Windows Docker Engine обычно работает через WSL2
-            try:
-                # Пытаемся запустить через WSL2
-                subprocess.run(['wsl', 'sudo', 'systemctl', 'start', 'docker'], check=True)
-                return True
-            except:
-                # Если WSL2 не работает, пробуем через Docker Desktop (fallback)
-                print(f"{Colors.YELLOW}⚠️ WSL2 не доступен, пробуем Docker Desktop...{Colors.END}")
-                try:
-                    subprocess.run(['cmd', '/c', 'start', 'Docker Desktop'], check=True)
-                    return True
-                except:
-                    return False
+            print(f"{Colors.YELLOW}⚠️ Windows: Docker не будет запущен автоматически{Colors.END}")
+            print(f"{Colors.CYAN}💡 Настройте Docker самостоятельно при необходимости{Colors.END}")
+            return False
             
         elif system == "Darwin":  # macOS
             print(f"{Colors.CYAN}💡 Запускаем Docker Engine на macOS...{Colors.END}")
@@ -419,28 +398,30 @@ def build_and_run_container():
         print(f"{Colors.RED}❌ Папка docker не найдена!{Colors.END}")
         return False
     
-    # Проверяем, что Docker запущен
+    # Проверяем, что Docker установлен и работает
     if not is_docker_running():
-        print(f"{Colors.RED}❌ Docker не запущен!{Colors.END}")
+        print(f"{Colors.RED}❌ Docker не работает!{Colors.END}")
+        print(f"{Colors.CYAN}💡 Пытаемся запустить Docker...{Colors.END}")
         
-        # Пытаемся запустить Docker Engine автоматически
-        print(f"{Colors.CYAN}💡 Пытаемся запустить Docker Engine...{Colors.END}")
         if start_docker_engine():
             print(f"{Colors.GREEN}✅ Docker запущен!{Colors.END}")
             # Ждем немного, чтобы Docker успел запуститься
             import time
             print(f"{Colors.YELLOW}⏳ Ждем запуска Docker...{Colors.END}")
-            time.sleep(10)
+            time.sleep(5)
             
             # Проверяем еще раз
             if is_docker_running():
                 print(f"{Colors.GREEN}✅ Docker готов к работе!{Colors.END}")
             else:
-                print(f"{Colors.RED}❌ Docker не запустился. Попробуйте запустить Docker вручную.{Colors.END}")
+                print(f"{Colors.RED}❌ Docker не запустился.{Colors.END}")
+                print(f"{Colors.YELLOW}💡 Запустите Docker Desktop вручную и попробуйте снова.{Colors.END}")
+                print(f"{Colors.YELLOW}⚠️ Убедитесь, что Docker Desktop полностью загрузился{Colors.END}")
                 return False
         else:
             print(f"{Colors.RED}❌ Не удалось запустить Docker автоматически.{Colors.END}")
-            print(f"{Colors.YELLOW}💡 Запустите Docker вручную и попробуйте снова.{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Запустите Docker Desktop вручную и попробуйте снова.{Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ Убедитесь, что Docker Desktop полностью загрузился{Colors.END}")
             return False
     
     try:
@@ -466,23 +447,39 @@ def build_and_run_container():
         return False
 
 def run_database_migration():
-    """Запускает миграцию базы данных через Docker (не ждет результата)"""
-    print(f"{Colors.YELLOW}🗄 Запускаю миграцию базы данных через Docker...{Colors.END}")
+    """Запускает миграцию базы данных (через Docker или напрямую)"""
+    print(f"{Colors.YELLOW}🗄 Запускаю миграцию базы данных...{Colors.END}")
     
-    # Проверяем, что контейнер запущен
-    if not is_container_running():
-        print(f"{Colors.YELLOW}⚠️ Контейнер не запущен, запускаю...{Colors.END}")
-        start_container()
-    
-    # Запускаем миграцию в фоне (не ждем результата)
-    subprocess.Popen([
-        "docker-compose", "exec", "coreness", 
-        "python", "tools/database_manager.py", "--all", "--migrate"
-    ], cwd="docker")
-    
-    print(f"{Colors.GREEN}✅ Миграция запущена в фоне!{Colors.END}")
-    print(f"{Colors.CYAN}💡 Проверьте логи контейнера для отслеживания прогресса:{Colors.END}")
-    print(f"{Colors.CYAN}   docker-compose logs -f coreness{Colors.END}")
+    # Проверяем, есть ли Docker и контейнер
+    if is_docker_running() and is_container_running():
+        print(f"{Colors.CYAN}💡 Запускаю миграцию через Docker контейнер...{Colors.END}")
+        
+        # Запускаем миграцию в фоне (не ждем результата)
+        subprocess.Popen([
+            "docker-compose", "exec", "coreness", 
+            "python", "tools/database_manager.py", "--all", "--migrate"
+        ], cwd="docker")
+        
+        print(f"{Colors.GREEN}✅ Миграция запущена в фоне через Docker!{Colors.END}")
+        print(f"{Colors.CYAN}💡 Проверьте логи контейнера для отслеживания прогресса:{Colors.END}")
+        print(f"{Colors.CYAN}   docker-compose logs -f coreness{Colors.END}")
+        
+    else:
+        print(f"{Colors.YELLOW}⚠️ Docker контейнер недоступен, запускаю миграцию напрямую...{Colors.END}")
+        
+        # Проверяем наличие скрипта миграции
+        migration_script = "tools/core/database_manager.py"
+        if os.path.exists(migration_script):
+            # Запускаем миграцию напрямую (не ждем результата)
+            subprocess.Popen([
+                "python", migration_script, "--all", "--migrate"
+            ])
+            
+            print(f"{Colors.GREEN}✅ Миграция запущена в фоне напрямую!{Colors.END}")
+            print(f"{Colors.CYAN}💡 Проверьте логи приложения для отслеживания прогресса{Colors.END}")
+        else:
+            print(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Миграция пропущена{Colors.END}")
 
 def remove_installer_script():
     """Удаляет скрипт установки, если это была первичная установка"""
@@ -502,6 +499,35 @@ def remove_installer_script():
         print(f"{Colors.CYAN}💡 Скрипт находится в tools/, удаление не требуется{Colors.END}")
 
 def run_initial_setup():
+    # Проверяем операционную систему
+    system = platform.system()
+    if system == "Windows":
+        print(f"{Colors.YELLOW}⚠️ Windows: Docker не будет установлен автоматически{Colors.END}")
+        print(f"{Colors.CYAN}💡 Будет развернуто только чистое ядро проекта{Colors.END}")
+        print(f"{Colors.CYAN}💡 Настройте зависимости самостоятельно{Colors.END}")
+        print()
+        
+        # Продолжаем с установкой проекта без Docker
+        print(f"{Colors.GREEN}🚀 Разворачиваем проект Coreness...{Colors.END}")
+        
+        # Этап 2: Скачивание конфигурации Docker (пропускаем)
+        print(f"\n{Colors.BLUE}=== ЭТАП 2: Скачивание конфигурации ==={Colors.END}")
+        if not download_docker_config():
+            print(f"{Colors.RED}❌ Не удалось скачать конфигурацию Docker!{Colors.END}")
+            return
+        
+        # Этап 3: Сборка и запуск контейнера (пропускаем)
+        print(f"\n{Colors.BLUE}=== ЭТАП 3: Сборка и запуск контейнера ==={Colors.END}")
+        print(f"{Colors.YELLOW}⚠️ Пропускаем сборку Docker контейнера на Windows{Colors.END}")
+        print(f"{Colors.CYAN}💡 Настройте Docker самостоятельно при необходимости{Colors.END}")
+        
+        print(f"\n{Colors.GREEN}🎉 Развертывание проекта завершено!{Colors.END}")
+        print(f"{Colors.CYAN}💡 Теперь переходим к этапу обновления...{Colors.END}")
+        
+        # Переходим к этапу обновления
+        run_core_update()
+        return
+    
     print(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Текущая папка станет корневой для Coreness.{Colors.END}")
     confirm = input("Вы уверены, что хотите продолжить первичную установку? (y/N): ")
     if confirm.lower() != 'y':
@@ -663,7 +689,7 @@ def create_backup(project_root, config, include_factory_configs=False):
     print(f"{Colors.GREEN}✅ Резервное копирование завершено: {processed_items}/{total_items} элементов{Colors.END}")
     return backup_dir
 
-def restore_backup(backup_dir, project_root):
+def restore_backup(backup_dir, project_root, config):
     """Восстанавливает из резервной копии"""
     print(f"{Colors.YELLOW}⏪ Восстанавливаю из резервной копии...{Colors.END}")
     
@@ -679,7 +705,7 @@ def restore_backup(backup_dir, project_root):
             backup_path = os.path.join(backup_dir, item)
             target_path = os.path.join(project_root, item)
             
-            if is_excluded(item):
+            if is_excluded(item, config):
                 continue
             
             # Удаляем существующий файл/папку
@@ -698,12 +724,7 @@ def restore_backup(backup_dir, project_root):
     
     return errors
 
-def is_factory_config(path):
-    """Проверяет, является ли путь заводским конфигом"""
-    factory_configs = ["config", "resources"]
-    return path in factory_configs
-
-def download_and_update(version_info, github_token, project_root, update_factory_configs=False):
+def download_and_update(version_info, github_token, project_root, config, update_factory_configs=False):
     """Скачивает и обновляет проект"""
     import tempfile
     import zipfile
@@ -779,12 +800,12 @@ def download_and_update(version_info, github_token, project_root, update_factory
         print(f"{Colors.YELLOW}♻️ Обновляю все файлы и папки...{Colors.END}")
         for item in os.listdir(repo_root):
             # Проверяем исключения
-            if is_excluded(item):
+            if is_excluded(item, config):
                 print(f"{Colors.CYAN}⏭ Пропускаю исключённый: {item}{Colors.END}")
                 continue
             
             # Проверяем заводские конфиги
-            if not update_factory_configs and is_factory_config(item):
+            if not update_factory_configs and is_factory_config(item, config):
                 print(f"{Colors.CYAN}⏭ Пропускаю заводской конфиг: {item}{Colors.END}")
                 continue
             
@@ -792,7 +813,7 @@ def download_and_update(version_info, github_token, project_root, update_factory
             abs_new = os.path.join(repo_root, item)
             
             # Проверяем тип синхронизации
-            if is_clean_sync_item(item):
+            if is_clean_sync_item(item, config):
                 print(f"{Colors.YELLOW}🗑 Чистая синхронизация: {item}{Colors.END}")
                 remove_old(abs_old)
                 copy_new(abs_new, abs_old)
@@ -809,21 +830,24 @@ def run_core_update():
     
     print(f"{Colors.CYAN}📁 Корневая папка проекта: {project_root}{Colors.END}")
     
+    # Загружаем конфигурацию
+    config = load_config()
+    
     # Показываем доступные версии
-    available_versions = get_available_versions()
+    available_versions = get_available_versions(config)
     print(f"{Colors.YELLOW}📋 Доступные версии:{Colors.END}")
     for version in available_versions:
-        version_info = get_version_info(version)
+        version_info = get_version_info(version, config)
         print(f"  • {version.upper()}: {version_info['name']} - {version_info['description']}")
     
     # Запрашиваем версию
     while True:
         selected_version = input(f"\n{Colors.YELLOW}Введите версию для обновления ({', '.join(available_versions)}): {Colors.END}").strip().lower()
-        if validate_version(selected_version):
+        if validate_version(selected_version, config):
             break
         print(f"{Colors.RED}❌ Неверная версия. Доступные: {', '.join(available_versions)}{Colors.END}")
     
-    version_info = get_version_info(selected_version)
+    version_info = get_version_info(selected_version, config)
     print(f"\n{Colors.GREEN}✅ Выбрана версия: {version_info['name']} ({version_info['description']}){Colors.END}")
     
     # Запрашиваем обновление заводских конфигов
@@ -835,7 +859,7 @@ def run_core_update():
         print(f"{Colors.CYAN}📁 Заводские конфиги будут пропущены (обновляются отдельно){Colors.END}")
     
     # Создаем резервную копию
-    backup_dir = create_backup(project_root)
+    backup_dir = create_backup(project_root, config)
     
     try:
         # Проверяем наличие токена
@@ -848,7 +872,7 @@ def run_core_update():
             github_token = request_manual_token()
         
         # Скачиваем и обновляем
-        download_and_update(version_info, github_token, project_root, update_factory_configs)
+        download_and_update(version_info, github_token, project_root, config, update_factory_configs)
         
         print(f"{Colors.GREEN}✅ Обновление завершено успешно!{Colors.END}")
         
@@ -876,7 +900,7 @@ def run_core_update():
         print(f"{Colors.RED}❌ Ошибка обновления: {e}{Colors.END}")
         print(f"{Colors.YELLOW}⏪ Восстанавливаю из резервной копии...{Colors.END}")
         
-        errors = restore_backup(backup_dir, project_root)
+        errors = restore_backup(backup_dir, project_root, config)
         if errors:
             print(f"{Colors.RED}❌ Не удалось восстановить следующие файлы/папки: {errors}{Colors.END}")
             print(f"{Colors.YELLOW}❗ Бэкап сохранён в {backup_dir}. Восстановите вручную!{Colors.END}")
