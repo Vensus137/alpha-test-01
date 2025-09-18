@@ -296,7 +296,8 @@ def check_location():
     print(f"{Colors.CYAN}📁 Корень проекта: {project_root}{Colors.END}")
     
     # Проверяем, лежит ли скрипт в tools/core
-    if script_dir == project_root / "tools" / "core":
+    # В контейнере скрипт всегда в /workspace/tools/core, но project_root = /workspace
+    if is_running_in_container() or script_dir == project_root / "tools" / "core":
         print(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Скрипт находится в папке tools/core!{Colors.END}")
         print(f"{Colors.YELLOW}   Первичная установка здесь НЕ РЕКОМЕНДУЕТСЯ!{Colors.END}")
         print(f"{Colors.YELLOW}   Это может поломать весь проект!{Colors.END}")
@@ -546,7 +547,7 @@ def is_container_running():
     try:
         # Проверяем контейнер напрямую через docker ps
         result = subprocess.run([
-            "docker", "ps", "-q", "--filter", "name=coreness"
+            "docker", "ps", "-q", "--filter", "name=coreness-container"
         ], capture_output=True, text=True)
         return bool(result.stdout.strip())
     except:
@@ -632,7 +633,7 @@ def run_database_migration():
         try:
             # Простой запуск без перехвата вывода - логи идут сразу
             result = subprocess.run([
-                "docker", "compose", "exec", "coreness", 
+                "docker", "compose", "exec", "coreness-service", 
                 "python", "-u", "tools/database_manager.py", "--all", "--migrate"
             ], cwd="docker", timeout=300)  # 5 минут таймаут
             
@@ -644,7 +645,7 @@ def run_database_migration():
                 
         except subprocess.TimeoutExpired:
             print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
-            print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker compose logs -f coreness{Colors.END}")
+            print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker compose logs -f coreness-service{Colors.END}")
         except Exception as e:
             print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         
@@ -779,8 +780,8 @@ def run_initial_setup():
             print(f"{Colors.CYAN}📁 Запускаю из папки: {docker_dir}{Colors.END}")
             
             result = subprocess.run([
-                "docker", "compose", "exec", "coreness", 
-                "python", "core_updater.py"
+                "docker", "compose", "exec", "coreness-service", 
+                "python", "core_updater.py", "--update"
             ], cwd=docker_dir)
             
             if result.returncode == 0:

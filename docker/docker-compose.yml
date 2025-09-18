@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  app:
+  coreness-service:
     build:
       context: ..                    # Контекст сборки - корень проекта
       dockerfile: docker/Dockerfile  # Путь к Dockerfile
-    container_name: coreness
+    container_name: coreness-container
     volumes:
-      - ../:/app                     # Монтируем весь проект
+      - ../:/workspace               # Монтируем весь проект в /workspace
     command: ["tail", "-f", "/dev/null"]  # Держим контейнер живым
     restart: unless-stopped

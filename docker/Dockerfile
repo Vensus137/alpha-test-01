@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаем рабочую директорию
-WORKDIR /app
+WORKDIR /workspace
 
 # Устанавливаем зависимости НАПРЯМУЮ (автономный образ)
 RUN pip install \
