@@ -12,6 +12,19 @@ import datetime
 import time
 from pathlib import Path
 
+# Настраиваем кодировку для Windows
+if sys.platform == "win32":
+    import io
+    try:
+        # Устанавливаем переменные окружения для UTF-8
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        
+        # Пересоздаем stdout/stderr с UTF-8
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    except Exception:
+        pass  # Игнорируем ошибки настройки кодировки
+
 # === ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ ===
 # Настройки репозиториев для разных версий
 VERSIONS = {
@@ -460,17 +473,17 @@ def run_database_migration():
             result = subprocess.run([
                 "docker-compose", "exec", "coreness", 
                 "python", "tools/database_manager.py", "--all", "--migrate"
-            ], cwd="docker", capture_output=True, text=True, timeout=300)  # 5 минут таймаут
+            ], cwd="docker", capture_output=True, text=True, timeout=300,
+            encoding='utf-8', errors='replace')  # 5 минут таймаут
             
             if result.returncode == 0:
                 print(f"{Colors.GREEN}✅ Миграция завершена успешно через Docker!{Colors.END}")
-                # Показываем последние строки логов
+                # Показываем все логи миграции
                 if result.stdout:
                     lines = result.stdout.strip().split('\n')
-                    if len(lines) > 3:
-                        print(f"{Colors.CYAN}📋 Последние сообщения миграции:{Colors.END}")
-                        for line in lines[-3:]:
-                            print(f"   {line}")
+                    print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
+                    for line in lines:
+                        print(f"   {line}")
             else:
                 print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
                 if result.stderr:
@@ -493,17 +506,17 @@ def run_database_migration():
             try:
                 result = subprocess.run([
                     "python", migration_script, "--all", "--migrate"
-                ], capture_output=True, text=True, timeout=300)  # 5 минут таймаут
+                ], capture_output=True, text=True, timeout=300, 
+                encoding='utf-8', errors='replace')  # 5 минут таймаут
                 
                 if result.returncode == 0:
                     print(f"{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
-                    # Показываем последние строки логов
+                    # Показываем все логи миграции
                     if result.stdout:
                         lines = result.stdout.strip().split('\n')
-                        if len(lines) > 3:
-                            print(f"{Colors.CYAN}📋 Последние сообщения миграции:{Colors.END}")
-                            for line in lines[-3:]:
-                                print(f"   {line}")
+                        print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
+                        for line in lines:
+                            print(f"   {line}")
                 else:
                     print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
                     if result.stderr:

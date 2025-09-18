@@ -1,25 +1,6 @@
 import os
 import sys
 
-# Настраиваем кодировку для Windows
-if sys.platform == "win32":
-    import io
-    import locale
-    
-    # Пробуем установить UTF-8 кодировку
-    try:
-        # Устанавливаем переменные окружения для UTF-8
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
-        
-        # Пересоздаем stdout/stderr с UTF-8
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-        
-        print("[INFO] Кодировка UTF-8 установлена для Windows")
-    except Exception as e:
-        print(f"[WARNING] Не удалось установить UTF-8: {e}")
-        print("[INFO] Используем стандартную кодировку")
-
 # Добавляем корневую директорию проекта в путь
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
