@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Глобальная команда для управления Coreness
-# Использование: coreness [start|stop|restart|logs|status|update]
+# Использование: coreness-service [start|stop|restart|logs|status|update]
 
 # Цвета для вывода
 RED='\033[0;31m'
@@ -12,27 +12,27 @@ NC='\033[0m'
 
 # Функция для поиска папки проекта
 find_project_dir() {
-    # Ищем папку coreness в домашней директории
-    if [ -d "$HOME/coreness" ]; then
-        echo "$HOME/coreness"
+    # Ищем папку coreness-service в домашней директории
+    if [ -d "$HOME/coreness-service" ]; then
+        echo "$HOME/coreness-service"
         return 0
     fi
     
     # Ищем в текущей директории
-    if [ -d "./coreness" ]; then
-        echo "./coreness"
+    if [ -d "./coreness-service" ]; then
+        echo "./coreness-service"
         return 0
     fi
     
     # Ищем в родительской директории
-    if [ -d "../coreness" ]; then
-        echo "../coreness"
+    if [ -d "../coreness-service" ]; then
+        echo "../coreness-service"
         return 0
     fi
     
     # Ищем в /opt
-    if [ -d "/opt/coreness" ]; then
-        echo "/opt/coreness"
+    if [ -d "/opt/coreness-service" ]; then
+        echo "/opt/coreness-service"
         return 0
     fi
     
@@ -80,14 +80,14 @@ install_commands() {
     
     # Получаем путь к текущему скрипту
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    SCRIPT_PATH="$SCRIPT_DIR/coreness"
+    SCRIPT_PATH="$SCRIPT_DIR/coreness-service"
     
     # Копируем основной скрипт
-    if cp "$SCRIPT_PATH" "$INSTALL_DIR/coreness"; then
-        chmod +x "$INSTALL_DIR/coreness"
-        echo -e "${GREEN}✅ Команда 'coreness' установлена${NC}"
+    if cp "$SCRIPT_PATH" "$INSTALL_DIR/coreness-service"; then
+        chmod +x "$INSTALL_DIR/coreness-service"
+        echo -e "${GREEN}✅ Команда 'coreness-service' установлена${NC}"
     else
-        echo -e "${RED}❌ Ошибка установки команды 'coreness'${NC}"
+        echo -e "${RED}❌ Ошибка установки команды 'coreness-service'${NC}"
         exit 1
     fi
     
@@ -97,14 +97,14 @@ install_commands() {
     echo -e "${GREEN}🎉 Глобальные команды установлены!${NC}"
     echo ""
     echo -e "${BLUE}Теперь вы можете использовать:${NC}"
-    echo "  coreness start     # Запуск"
-    echo "  coreness stop      # Остановка"
-    echo "  coreness restart   # Перезапуск"
-    echo "  coreness logs      # Логи"
-    echo "  coreness status    # Статус"
-    echo "  coreness update    # Обновление"
-    echo "  coreness db        # Работа с БД"
-    echo "  coreness shell     # Shell в контейнере"
+    echo "  coreness-service start     # Запуск"
+    echo "  coreness-service stop      # Остановка"
+    echo "  coreness-service restart   # Перезапуск"
+    echo "  coreness-service logs      # Логи"
+    echo "  coreness-service status    # Статус"
+    echo "  coreness-service update    # Обновление"
+    echo "  coreness-service db        # Работа с БД"
+    echo "  coreness-service shell     # Shell в контейнере"
 }
 
 # Функция для создания алиасов
@@ -118,14 +118,14 @@ create_aliases() {
     if ! grep -q "# Coreness aliases" "$ALIAS_FILE" 2>/dev/null; then
         echo "" >> "$ALIAS_FILE"
         echo "# Coreness aliases" >> "$ALIAS_FILE"
-        echo "alias coreness-start='coreness start'" >> "$ALIAS_FILE"
-        echo "alias coreness-stop='coreness stop'" >> "$ALIAS_FILE"
-        echo "alias coreness-restart='coreness restart'" >> "$ALIAS_FILE"
-        echo "alias coreness-logs='coreness logs'" >> "$ALIAS_FILE"
-        echo "alias coreness-status='coreness status'" >> "$ALIAS_FILE"
-        echo "alias coreness-update='coreness update'" >> "$ALIAS_FILE"
-        echo "alias coreness-db='coreness db'" >> "$ALIAS_FILE"
-        echo "alias coreness-shell='coreness shell'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-start='coreness-service start'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-stop='coreness-service stop'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-restart='coreness-service restart'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-logs='coreness-service logs'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-status='coreness-service status'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-update='coreness-service update'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-db='coreness-service db'" >> "$ALIAS_FILE"
+        echo "alias coreness-service-shell='coreness-service shell'" >> "$ALIAS_FILE"
         
         echo -e "${GREEN}✅ Алиасы созданы${NC}"
     else
@@ -134,7 +134,7 @@ create_aliases() {
 }
 
 # Функция для запуска
-start_coreness() {
+start_coreness-service() {
     echo -e "${YELLOW}🚀 Запуск Coreness...${NC}"
     
     PROJECT_DIR=$(find_project_dir)
@@ -152,11 +152,11 @@ start_coreness() {
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker-compose exec -d coreness python main.py; then
+        if docker-compose exec -d coreness-service python main.py; then
             echo -e "${GREEN}✅ Coreness запущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер запущен, но приложение не стартовало${NC}"
-            echo -e "${YELLOW}💡 Проверьте логи: coreness logs${NC}"
+            echo -e "${YELLOW}💡 Проверьте логи: coreness-service logs${NC}"
         fi
     else
         echo -e "${RED}❌ Ошибка запуска контейнера${NC}"
@@ -165,7 +165,7 @@ start_coreness() {
 }
 
 # Функция для остановки
-stop_coreness() {
+stop_coreness-service() {
     echo -e "${YELLOW}🛑 Остановка Coreness...${NC}"
     
     PROJECT_DIR=$(find_project_dir)
@@ -185,7 +185,7 @@ stop_coreness() {
 }
 
 # Функция для перезапуска
-restart_coreness() {
+restart_coreness-service() {
     echo -e "${YELLOW}🔄 Перезапуск Coreness...${NC}"
     
     PROJECT_DIR=$(find_project_dir)
@@ -207,11 +207,11 @@ restart_coreness() {
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker-compose exec -d coreness python main.py; then
+        if docker-compose exec -d coreness-service python main.py; then
             echo -e "${GREEN}✅ Coreness перезапущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер перезапущен, но приложение не стартовало${NC}"
-            echo -e "${YELLOW}💡 Проверьте логи: coreness logs${NC}"
+            echo -e "${YELLOW}💡 Проверьте логи: coreness-service logs${NC}"
         fi
     else
         echo -e "${RED}❌ Ошибка перезапуска контейнера${NC}"
@@ -220,7 +220,7 @@ restart_coreness() {
 }
 
 # Функция для просмотра логов
-logs_coreness() {
+logs_coreness-service() {
     PROJECT_DIR=$(find_project_dir)
     if [ $? -ne 0 ]; then
         echo -e "${RED}❌ Проект Coreness не найден!${NC}"
@@ -232,7 +232,7 @@ logs_coreness() {
 }
 
 # Функция для проверки статуса
-status_coreness() {
+status_coreness-service() {
     PROJECT_DIR=$(find_project_dir)
     if [ $? -ne 0 ]; then
         echo -e "${RED}❌ Проект Coreness не найден!${NC}"
@@ -245,7 +245,7 @@ status_coreness() {
     docker-compose ps
     
     echo -e "\n${BLUE}📈 Использование ресурсов:${NC}"
-    docker stats --no-stream coreness 2>/dev/null || echo "Контейнер не запущен"
+    docker stats --no-stream coreness-container 2>/dev/null || echo "Контейнер не запущен"
 }
 
 # Функция для работы с БД
@@ -261,18 +261,18 @@ db_coreness() {
     cd "$PROJECT_DIR/docker"
     
     # Проверяем, что контейнер запущен
-    if ! docker-compose ps | grep -q "coreness.*Up"; then
+    if ! docker-compose ps | grep -q "coreness-container.*Up"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         docker-compose up -d
     fi
     
     # Запускаем database_manager.py с переданными параметрами
     shift  # Убираем первый аргумент (db)
-    docker-compose exec coreness python tools/database_manager.py "$@"
+    docker-compose exec coreness-service python tools/database_manager.py "$@"
 }
 
 # Функция для запуска shell в контейнере
-shell_coreness() {
+shell_coreness-service() {
     echo -e "${YELLOW}🐚 Запуск shell в контейнере...${NC}"
     
     PROJECT_DIR=$(find_project_dir)
@@ -284,17 +284,17 @@ shell_coreness() {
     cd "$PROJECT_DIR/docker"
     
     # Проверяем, что контейнер запущен
-    if ! docker-compose ps | grep -q "coreness.*Up"; then
+    if ! docker-compose ps | grep -q "coreness-container.*Up"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         docker-compose up -d
     fi
     
     # Запускаем bash в контейнере
-    docker-compose exec coreness bash
+    docker-compose exec coreness-service bash
 }
 
 # Функция для обновления
-update_coreness() {
+update_coreness-service() {
     echo -e "${YELLOW}🔄 Обновление Coreness...${NC}"
     
     PROJECT_DIR=$(find_project_dir)
@@ -311,7 +311,7 @@ update_coreness() {
 show_help() {
     echo -e "${BLUE}Coreness - Управление системой${NC}"
     echo ""
-    echo "Использование: coreness [команда] [параметры]"
+    echo "Использование: coreness-service [команда] [параметры]"
     echo ""
     echo "Команды:"
     echo "  install   Установить глобальные команды"
@@ -326,13 +326,13 @@ show_help() {
     echo "  help      Показать эту справку"
     echo ""
     echo "Примеры:"
-    echo "  coreness install                    # Установить команды"
-    echo "  coreness start                      # Запустить систему"
-    echo "  coreness logs                       # Показать логи"
-    echo "  coreness status                     # Показать статус"
-    echo "  coreness db --all --migrate         # Миграция БД"
-    echo "  coreness db actions --recreate-tables  # Пересоздать таблицу"
-    echo "  coreness shell                      # Shell в контейнере"
+    echo "  coreness-service install                    # Установить команды"
+    echo "  coreness-service start                      # Запустить систему"
+    echo "  coreness-service logs                       # Показать логи"
+    echo "  coreness-service status                     # Показать статус"
+    echo "  coreness-service db --all --migrate         # Миграция БД"
+    echo "  coreness-service db actions --recreate-tables  # Пересоздать таблицу"
+    echo "  coreness-service shell                      # Shell в контейнере"
 }
 
 # Основная логика
@@ -348,28 +348,28 @@ main() {
     
     case "${1:-help}" in
         start)
-            start_coreness
+            start_coreness-service
             ;;
         stop)
-            stop_coreness
+            stop_coreness-service
             ;;
         restart)
-            restart_coreness
+            restart_coreness-service
             ;;
         logs)
-            logs_coreness
+            logs_coreness-service
             ;;
         status)
-            status_coreness
+            status_coreness-service
             ;;
         db)
-            db_coreness "$@"
+            db_coreness-service "$@"
             ;;
         shell)
-            shell_coreness
+            shell_coreness-service
             ;;
         update)
-            update_coreness
+            update_coreness-service
             ;;
         help|--help|-h)
             show_help
