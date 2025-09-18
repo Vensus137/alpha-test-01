@@ -454,15 +454,33 @@ def run_database_migration():
     if is_docker_running() and is_container_running():
         print(f"{Colors.CYAN}💡 Запускаю миграцию через Docker контейнер...{Colors.END}")
         
-        # Запускаем миграцию в фоне (не ждем результата)
-        subprocess.Popen([
-            "docker-compose", "exec", "coreness", 
-            "python", "tools/database_manager.py", "--all", "--migrate"
-        ], cwd="docker")
-        
-        print(f"{Colors.GREEN}✅ Миграция запущена в фоне через Docker!{Colors.END}")
-        print(f"{Colors.CYAN}💡 Проверьте логи контейнера для отслеживания прогресса:{Colors.END}")
-        print(f"{Colors.CYAN}   docker-compose logs -f coreness{Colors.END}")
+        # Запускаем миграцию через Docker и ждем завершения
+        print(f"{Colors.CYAN}⏳ Запускаю миграцию базы данных через Docker...{Colors.END}")
+        try:
+            result = subprocess.run([
+                "docker-compose", "exec", "coreness", 
+                "python", "tools/database_manager.py", "--all", "--migrate"
+            ], cwd="docker", capture_output=True, text=True, timeout=300)  # 5 минут таймаут
+            
+            if result.returncode == 0:
+                print(f"{Colors.GREEN}✅ Миграция завершена успешно через Docker!{Colors.END}")
+                # Показываем последние строки логов
+                if result.stdout:
+                    lines = result.stdout.strip().split('\n')
+                    if len(lines) > 3:
+                        print(f"{Colors.CYAN}📋 Последние сообщения миграции:{Colors.END}")
+                        for line in lines[-3:]:
+                            print(f"   {line}")
+            else:
+                print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
+                if result.stderr:
+                    print(f"{Colors.RED}Ошибка: {result.stderr}{Colors.END}")
+                    
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
+            print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker-compose logs -f coreness{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         
     else:
         print(f"{Colors.YELLOW}⚠️ Docker контейнер недоступен, запускаю миграцию напрямую...{Colors.END}")
@@ -470,13 +488,32 @@ def run_database_migration():
         # Проверяем наличие скрипта миграции
         migration_script = "tools/core/database_manager.py"
         if os.path.exists(migration_script):
-            # Запускаем миграцию напрямую (не ждем результата)
-            subprocess.Popen([
-                "python", migration_script, "--all", "--migrate"
-            ])
-            
-            print(f"{Colors.GREEN}✅ Миграция запущена в фоне напрямую!{Colors.END}")
-            print(f"{Colors.CYAN}💡 Проверьте логи приложения для отслеживания прогресса{Colors.END}")
+            # Запускаем миграцию и ждем завершения
+            print(f"{Colors.CYAN}⏳ Запускаю миграцию базы данных...{Colors.END}")
+            try:
+                result = subprocess.run([
+                    "python", migration_script, "--all", "--migrate"
+                ], capture_output=True, text=True, timeout=300)  # 5 минут таймаут
+                
+                if result.returncode == 0:
+                    print(f"{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
+                    # Показываем последние строки логов
+                    if result.stdout:
+                        lines = result.stdout.strip().split('\n')
+                        if len(lines) > 3:
+                            print(f"{Colors.CYAN}📋 Последние сообщения миграции:{Colors.END}")
+                            for line in lines[-3:]:
+                                print(f"   {line}")
+                else:
+                    print(f"{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
+                    if result.stderr:
+                        print(f"{Colors.RED}Ошибка: {result.stderr}{Colors.END}")
+                        
+            except subprocess.TimeoutExpired:
+                print(f"{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
+                print(f"{Colors.CYAN}💡 Проверьте состояние базы данных вручную{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
         else:
             print(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}")
             print(f"{Colors.YELLOW}💡 Миграция пропущена{Colors.END}")
@@ -888,9 +925,11 @@ def run_core_update():
         else:
             print(f"{Colors.CYAN}💾 Резервная копия сохранена в {backup_dir}{Colors.END}")
         
-        print(f"\n{Colors.GREEN}🚀 Обновление завершено! Миграция БД запущена в фоне.{Colors.END}")
-        print(f"{Colors.CYAN}💡 Проверьте логи контейнера для отслеживания миграции:{Colors.END}")
-        print(f"{Colors.CYAN}   docker-compose logs -f coreness{Colors.END}")
+        print(f"\n{Colors.GREEN}🚀 Обновление завершено!{Colors.END}")
+        print(f"{Colors.CYAN}💡 Все этапы выполнены успешно:{Colors.END}")
+        print(f"{Colors.CYAN}   ✅ Файлы обновлены{Colors.END}")
+        print(f"{Colors.CYAN}   ✅ База данных мигрирована{Colors.END}")
+        print(f"{Colors.CYAN}   ✅ Проект готов к работе{Colors.END}")
         
         # Удаляем скрипт установки, если это была первичная установка
         print(f"\n{Colors.BLUE}=== ЭТАП: Очистка ==={Colors.END}")
