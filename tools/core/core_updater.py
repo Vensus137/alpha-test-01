@@ -151,7 +151,7 @@ def check_docker():
         return False
 
 def install_docker():
-    """Устанавливает Docker в зависимости от операционной системы"""
+    """Устанавливает Docker Engine в зависимости от операционной системы"""
     import platform
     import subprocess
     
@@ -159,11 +159,11 @@ def install_docker():
     print(f"{Colors.YELLOW}🔧 Определена система: {system}{Colors.END}")
     
     if system == "linux":
-        print(f"{Colors.YELLOW}📦 Устанавливаем Docker для Linux...{Colors.END}")
+        print(f"{Colors.YELLOW}📦 Устанавливаем Docker Engine для Linux...{Colors.END}")
         try:
             # Проверяем наличие apt
             subprocess.run(['which', 'apt'], check=True, capture_output=True)
-            print(f"{Colors.CYAN}💡 Используем apt для установки Docker...{Colors.END}")
+            print(f"{Colors.CYAN}💡 Используем apt для установки Docker Engine...{Colors.END}")
             
             # Обновляем пакеты
             subprocess.run(['sudo', 'apt', 'update'], check=True)
@@ -193,14 +193,14 @@ def install_docker():
             # Добавляем пользователя в группу docker
             subprocess.run(['sudo', 'usermod', '-aG', 'docker', os.getenv('USER')], check=True)
             
-            print(f"{Colors.GREEN}✅ Docker установлен через apt!{Colors.END}")
+            print(f"{Colors.GREEN}✅ Docker Engine установлен через apt!{Colors.END}")
             print(f"{Colors.YELLOW}⚠️ Перезайдите в систему для применения изменений группы docker!{Colors.END}")
             
         except subprocess.CalledProcessError:
             try:
                 # Проверяем наличие yum
                 subprocess.run(['which', 'yum'], check=True, capture_output=True)
-                print(f"{Colors.CYAN}💡 Используем yum для установки Docker...{Colors.END}")
+                print(f"{Colors.CYAN}💡 Используем yum для установки Docker Engine...{Colors.END}")
                 
                 # Устанавливаем зависимости
                 subprocess.run(['sudo', 'yum', 'install', '-y', 'yum-utils'], check=True)
@@ -218,59 +218,50 @@ def install_docker():
                 # Добавляем пользователя в группу docker
                 subprocess.run(['sudo', 'usermod', '-aG', 'docker', os.getenv('USER')], check=True)
                 
-                print(f"{Colors.GREEN}✅ Docker установлен через yum!{Colors.END}")
+                print(f"{Colors.GREEN}✅ Docker Engine установлен через yum!{Colors.END}")
                 print(f"{Colors.YELLOW}⚠️ Перезайдите в систему для применения изменений группы docker!{Colors.END}")
                 
             except subprocess.CalledProcessError:
                 print(f"{Colors.RED}❌ Не удалось определить пакетный менеджер!{Colors.END}")
                 return False
     elif system == "darwin":  # macOS
-        print(f"{Colors.YELLOW}📦 Устанавливаем Docker для macOS...{Colors.END}")
-        print(f"{Colors.CYAN}💡 Используем Homebrew для установки Docker...{Colors.END}")
+        print(f"{Colors.YELLOW}📦 Устанавливаем Docker Engine для macOS...{Colors.END}")
+        print(f"{Colors.CYAN}💡 Используем Homebrew для установки Docker Engine...{Colors.END}")
         
         try:
             # Проверяем наличие Homebrew
             subprocess.run(['which', 'brew'], check=True, capture_output=True)
             
-            # Устанавливаем Docker через Homebrew
-            subprocess.run(['brew', 'install', '--cask', 'docker'], check=True)
+            # Устанавливаем Docker Engine через Homebrew
+            subprocess.run(['brew', 'install', 'docker'], check=True)
             
-            print(f"{Colors.GREEN}✅ Docker установлен через Homebrew!{Colors.END}")
-            print(f"{Colors.YELLOW}⚠️ Запустите Docker Desktop из Applications!{Colors.END}")
+            print(f"{Colors.GREEN}✅ Docker Engine установлен через Homebrew!{Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ Запустите Docker Engine: brew services start docker{Colors.END}")
             
         except subprocess.CalledProcessError:
             print(f"{Colors.RED}❌ Homebrew не найден! Установите Homebrew или Docker Desktop вручную.{Colors.END}")
             return False
     elif system == "windows":
-        print(f"{Colors.YELLOW}📦 Устанавливаем Docker для Windows...{Colors.END}")
+        print(f"{Colors.YELLOW}📦 Устанавливаем Docker Engine для Windows...{Colors.END}")
+        print(f"{Colors.CYAN}💡 Рекомендуем использовать WSL2 + Docker Engine{Colors.END}")
         
         try:
-            # Проверяем наличие winget
-            subprocess.run(['winget', '--version'], check=True, capture_output=True)
-            print(f"{Colors.CYAN}💡 Используем winget для установки Docker...{Colors.END}")
+            # Проверяем наличие WSL2
+            subprocess.run(['wsl', '--version'], check=True, capture_output=True)
+            print(f"{Colors.CYAN}💡 WSL2 найден, устанавливаем Docker Engine в WSL2...{Colors.END}")
             
-            # Устанавливаем Docker Desktop через winget
-            subprocess.run(['winget', 'install', 'Docker.DockerDesktop'], check=True)
+            # Устанавливаем Docker Engine в WSL2
+            subprocess.run(['wsl', 'sudo', 'apt', 'update'], check=True)
+            subprocess.run(['wsl', 'sudo', 'apt', 'install', '-y', 'docker.io'], check=True)
+            subprocess.run(['wsl', 'sudo', 'systemctl', 'start', 'docker'], check=True)
+            subprocess.run(['wsl', 'sudo', 'systemctl', 'enable', 'docker'], check=True)
             
-            print(f"{Colors.GREEN}✅ Docker установлен через winget!{Colors.END}")
-            print(f"{Colors.YELLOW}⚠️ Запустите Docker Desktop из меню Пуск!{Colors.END}")
+            print(f"{Colors.GREEN}✅ Docker Engine установлен в WSL2!{Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ Docker Engine работает в WSL2 окружении{Colors.END}")
             
         except subprocess.CalledProcessError:
-            try:
-                # Проверяем наличие chocolatey
-                subprocess.run(['choco', '--version'], check=True, capture_output=True)
-                print(f"{Colors.CYAN}💡 Используем Chocolatey для установки Docker...{Colors.END}")
-                
-                # Устанавливаем Docker Desktop через chocolatey
-                subprocess.run(['choco', 'install', 'docker-desktop', '-y'], check=True)
-                
-                print(f"{Colors.GREEN}✅ Docker установлен через Chocolatey!{Colors.END}")
-                print(f"{Colors.YELLOW}⚠️ Запустите Docker Desktop из меню Пуск!{Colors.END}")
-                
-            except subprocess.CalledProcessError:
-                print(f"{Colors.RED}❌ winget и Chocolatey не найдены!{Colors.END}")
-                print(f"{Colors.YELLOW}💡 Установите Docker Desktop вручную с https://www.docker.com/products/docker-desktop/{Colors.END}")
-                return False
+            print(f"{Colors.RED}❌ WSL2 не найден! Установите WSL2 или Docker Desktop вручную.{Colors.END}")
+            return False
     else:
         print(f"{Colors.RED}❌ Неподдерживаемая операционная система: {system}{Colors.END}")
         return False
@@ -298,15 +289,20 @@ def download_docker_config():
         # Клонируем только папку docker из Base репозитория
         print(f"{Colors.CYAN}💡 Клонируем папку docker из Base репозитория...{Colors.END}")
         print(f"{Colors.CYAN}   URL: {base_repo_url}{Colors.END}")
+        
+        # Сначала клонируем репозиторий
         subprocess.run([
             'git', 'clone', '--depth', '1', 
             '--filter=blob:none', 
-            '--sparse-checkout', 
             base_repo_url,
             temp_dir
         ], check=True)
         
         # Настраиваем sparse-checkout для папки docker
+        subprocess.run([
+            'git', 'sparse-checkout', 'init', '--cone'
+        ], cwd=temp_dir, check=True)
+        
         subprocess.run([
             'git', 'sparse-checkout', 'set', 'docker'
         ], cwd=temp_dir, check=True)
@@ -317,14 +313,83 @@ def download_docker_config():
             shutil.rmtree('docker')
         shutil.copytree(f'{temp_dir}/docker', 'docker')
         
-        # Удаляем временную папку
-        shutil.rmtree(temp_dir)
+        # Удаляем временную папку (с обработкой прав доступа на Windows)
+        try:
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            # На Windows иногда нужно сбросить атрибуты файлов
+            import stat
+            def remove_readonly(func, path, exc):
+                if os.path.exists(path):
+                    os.chmod(path, stat.S_IWRITE)
+                    func(path)
+            shutil.rmtree(temp_dir, onerror=remove_readonly)
         
         print(f"{Colors.GREEN}✅ Конфигурация Docker скачана!{Colors.END}")
         return True
         
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}❌ Ошибка при скачивании конфигурации: {e}{Colors.END}")
+        return False
+
+def is_docker_running():
+    """Проверяет, запущен ли Docker daemon"""
+    try:
+        subprocess.run(['docker', 'info'], capture_output=True, check=True)
+        return True
+    except:
+        return False
+
+def start_docker_engine():
+    """Запускает Docker Engine"""
+    try:
+        system = platform.system()
+        
+        if system == "Windows":
+            print(f"{Colors.CYAN}💡 Запускаем Docker Engine на Windows...{Colors.END}")
+            # На Windows Docker Engine обычно работает через WSL2
+            try:
+                # Пытаемся запустить через WSL2
+                subprocess.run(['wsl', 'sudo', 'systemctl', 'start', 'docker'], check=True)
+                return True
+            except:
+                # Если WSL2 не работает, пробуем через Docker Desktop (fallback)
+                print(f"{Colors.YELLOW}⚠️ WSL2 не доступен, пробуем Docker Desktop...{Colors.END}")
+                try:
+                    subprocess.run(['cmd', '/c', 'start', 'Docker Desktop'], check=True)
+                    return True
+                except:
+                    return False
+            
+        elif system == "Darwin":  # macOS
+            print(f"{Colors.CYAN}💡 Запускаем Docker Engine на macOS...{Colors.END}")
+            # На macOS Docker Engine через Homebrew
+            try:
+                subprocess.run(['brew', 'services', 'start', 'docker'], check=True)
+                return True
+            except:
+                # Fallback на Docker Desktop
+                try:
+                    subprocess.run(['open', '-a', 'Docker'], check=True)
+                    return True
+                except:
+                    return False
+            
+        elif system == "Linux":
+            print(f"{Colors.CYAN}💡 Запускаем Docker Engine на Linux...{Colors.END}")
+            # На Linux Docker Engine как сервис
+            subprocess.run(['sudo', 'systemctl', 'start', 'docker'], check=True)
+            return True
+            
+        else:
+            print(f"{Colors.RED}❌ Неизвестная ОС: {system}{Colors.END}")
+            return False
+            
+    except subprocess.CalledProcessError:
+        print(f"{Colors.RED}❌ Не удалось запустить Docker Engine{Colors.END}")
+        return False
+    except Exception as e:
+        print(f"{Colors.RED}❌ Ошибка при запуске Docker Engine: {e}{Colors.END}")
         return False
 
 def is_container_running():
@@ -353,6 +418,30 @@ def build_and_run_container():
     if not os.path.exists('docker'):
         print(f"{Colors.RED}❌ Папка docker не найдена!{Colors.END}")
         return False
+    
+    # Проверяем, что Docker запущен
+    if not is_docker_running():
+        print(f"{Colors.RED}❌ Docker не запущен!{Colors.END}")
+        
+        # Пытаемся запустить Docker Engine автоматически
+        print(f"{Colors.CYAN}💡 Пытаемся запустить Docker Engine...{Colors.END}")
+        if start_docker_engine():
+            print(f"{Colors.GREEN}✅ Docker запущен!{Colors.END}")
+            # Ждем немного, чтобы Docker успел запуститься
+            import time
+            print(f"{Colors.YELLOW}⏳ Ждем запуска Docker...{Colors.END}")
+            time.sleep(10)
+            
+            # Проверяем еще раз
+            if is_docker_running():
+                print(f"{Colors.GREEN}✅ Docker готов к работе!{Colors.END}")
+            else:
+                print(f"{Colors.RED}❌ Docker не запустился. Попробуйте запустить Docker вручную.{Colors.END}")
+                return False
+        else:
+            print(f"{Colors.RED}❌ Не удалось запустить Docker автоматически.{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Запустите Docker вручную и попробуйте снова.{Colors.END}")
+            return False
     
     try:
         # Переходим в папку docker
