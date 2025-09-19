@@ -39,6 +39,9 @@ class SettingsManager:
         # Кеш для настроек и планов запуска
         self._cache: Dict[str, Any] = {}
         
+        # Кэш для переменных окружения (имя переменной -> значение)
+        self._env_cache: Dict[str, str] = {}
+        
         # Время запуска приложения (будем получать по требованию)
         self._startup_time = None
 
@@ -70,6 +73,12 @@ class SettingsManager:
         if not preset:
             plugin_settings = self.get_plugin_settings('settings_manager')
             preset = plugin_settings.get('default_preset', 'default')
+        
+        # Проверяем существование пресета и делаем фоллбек на default если не найден
+        preset_path = os.path.join(self.project_root, self.config_dir, f'presets/{preset}')
+        if not os.path.exists(preset_path):
+            self.logger.warning(f"Пресет '{preset}' не найден, используется fallback на 'default'")
+            preset = 'default'
         
         # Сохраняем пресет в кэш для быстрого доступа
         self._cache['current_preset'] = preset
@@ -198,6 +207,26 @@ class SettingsManager:
         else:
             return data
     
+    def _get_env_variable(self, env_var: str) -> str:
+        """
+        Получает переменную окружения с кэшированием и логированием
+        """
+        # Проверяем кэш
+        if env_var in self._env_cache:
+            return self._env_cache[env_var]
+        
+        # Получаем значение из окружения
+        resolved_value = os.getenv(env_var, '')
+        
+        # Логируем только один раз для каждой переменной
+        if not resolved_value:
+            self.logger.warning(f"Переменная окружения {env_var} не установлена")
+        
+        # Кэшируем результат
+        self._env_cache[env_var] = resolved_value
+        
+        return resolved_value
+    
     def _resolve_env_variable_in_string(self, value: str) -> str:
         """
         Заменяет переменные окружения в строке
@@ -208,10 +237,7 @@ class SettingsManager:
         # Проверяем, является ли вся строка переменной окружения
         if value.startswith('${') and value.endswith('}'):
             env_var = value[2:-1]
-            resolved_value = os.getenv(env_var, '')
-            if not resolved_value:
-                self.logger.warning(f"Переменная окружения {env_var} не установлена")
-            return resolved_value
+            return self._get_env_variable(env_var)
         
         # Проверяем, содержит ли строка переменные окружения
         import re
@@ -219,10 +245,7 @@ class SettingsManager:
         
         def replace_env_var(match):
             env_var = match.group(1)
-            resolved_value = os.getenv(env_var, '')
-            if not resolved_value:
-                self.logger.warning(f"Переменная окружения {env_var} не установлена")
-            return resolved_value
+            return self._get_env_variable(env_var)
         
         return re.sub(pattern, replace_env_var, value)
     

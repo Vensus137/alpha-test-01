@@ -4,13 +4,13 @@
 start:
   actions:
     - type: send
-      text: "Привет! Добро пожаловать в бота!"
+      text: "👋 Привет!\n\n📋 Выберите действие:"
       inline:
-        - [{"Меню": "main_menu"}]
+        - [{"📋 Меню": "main_menu"}, {"📚 Справка": "help"}]
 
 help:
   actions:
     - type: send
-      text: "Справка по командам:\n\n/start - начать работу с ботом\n/help - показать эту справку"
+      text: "📚 Справка\n\n🔹 /start - начать работу\n🔹 /help - показать справку"
       inline:
-        - [{"Назад": "start"}]
+        - [{"🔙 Назад": "start"}]

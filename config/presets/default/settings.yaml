@@ -30,10 +30,16 @@ permission_manager:
   roles: {}
 
 tg_command_registry:
-  commands: []
+  commands:
+    - command: "start"
+      description: "Основное меню"
+      scope: all_private_chats
+    - command: "help"
+      description: "Справка"
+      scope: all_private_chats
   commands_clear:
-    chats: []
-    chat_members: []
+    chats: []                    # Список чатов для очистки команд (scope: chat)
+    chat_members: []             # Список пользователей в чатах для очистки команд (scope: chat_member)
 
 logger:
   console_enabled: true
