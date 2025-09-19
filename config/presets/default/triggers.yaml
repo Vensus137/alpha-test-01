@@ -15,8 +15,9 @@ text:
 
 callback:
   exact:
-    "Меню": "start"
+    "Меню": "main_menu"
     "Назад": "start"
+    "Справка": "help"
   contains: {}
 
 new_member:
