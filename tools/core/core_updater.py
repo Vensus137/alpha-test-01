@@ -544,6 +544,10 @@ def start_docker_engine():
 
 def is_container_running():
     """Проверяет, запущен ли контейнер"""
+    # Если мы внутри контейнера, контейнер всегда "доступен"
+    if is_running_in_container():
+        return True
+    
     try:
         # Проверяем контейнер напрямую через docker ps
         result = subprocess.run([
@@ -622,8 +626,47 @@ def run_database_migration():
     """Запускает миграцию базы данных (через Docker или напрямую)"""
     print(f"{Colors.YELLOW}🗄 Запускаю миграцию базы данных...{Colors.END}")
     
-    # Проверяем, есть ли Docker и контейнер
-    if is_docker_running() and is_container_running():
+    migration_success = False
+    
+    # Проверяем, где мы запущены
+    if is_running_in_container():
+        print(f"{Colors.CYAN}💡 Запускаю миграцию напрямую (внутри контейнера)...{Colors.END}")
+        
+        # Запускаем миграцию напрямую внутри контейнера
+        print(f"{Colors.CYAN}⏳ Запускаю миграцию базы данных...{Colors.END}")
+        print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
+        
+        try:
+            # Используем Popen для потокового вывода логов
+            process = subprocess.Popen([
+                sys.executable, "-u", "tools/core/database_manager.py", "--all", "--migrate"
+            ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            
+            # Читаем логи в реальном времени
+            for line in process.stdout:
+                print(line, end='')
+                sys.stdout.flush()
+            
+            # Ждем завершения процесса
+            return_code = process.wait(timeout=300)  # 5 минут таймаут
+            
+            if return_code == 0:
+                print(f"\n{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
+                migration_success = True
+            else:
+                print(f"\n{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
+                print(f"{Colors.RED}Код возврата: {return_code}{Colors.END}")
+                
+        except subprocess.TimeoutExpired:
+            print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
+            if 'process' in locals():
+                process.terminate()
+        except Exception as e:
+            print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
+            if 'process' in locals():
+                process.terminate()
+                
+    elif is_docker_running() and is_container_running():
         print(f"{Colors.CYAN}💡 Запускаю миграцию через Docker контейнер...{Colors.END}")
         
         # Запускаем миграцию через Docker напрямую (логи идут сразу)
@@ -631,23 +674,36 @@ def run_database_migration():
         print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
         
         try:
-            # Простой запуск без перехвата вывода - логи идут сразу
-            result = subprocess.run([
+            # Используем Popen для потокового вывода логов
+            process = subprocess.Popen([
                 "docker", "compose", "exec", "coreness-service", 
-                "python", "-u", "tools/database_manager.py", "--all", "--migrate"
-            ], cwd="docker", timeout=300)  # 5 минут таймаут
+                "python", "-u", "tools/core/database_manager.py", "--all", "--migrate"
+            ], cwd="docker", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             
-            if result.returncode == 0:
+            # Читаем логи в реальном времени
+            for line in process.stdout:
+                print(line, end='')
+                sys.stdout.flush()
+            
+            # Ждем завершения процесса
+            return_code = process.wait(timeout=300)  # 5 минут таймаут
+            
+            if return_code == 0:
                 print(f"\n{Colors.GREEN}✅ Миграция завершена успешно через Docker!{Colors.END}")
+                migration_success = True
             else:
                 print(f"\n{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
-                print(f"{Colors.RED}Код возврата: {result.returncode}{Colors.END}")
+                print(f"{Colors.RED}Код возврата: {return_code}{Colors.END}")
                 
         except subprocess.TimeoutExpired:
             print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
             print(f"{Colors.CYAN}💡 Проверьте логи контейнера: docker compose logs -f coreness-service{Colors.END}")
+            if 'process' in locals():
+                process.terminate()
         except Exception as e:
             print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
+            if 'process' in locals():
+                process.terminate()
         
     else:
         print(f"{Colors.YELLOW}⚠️ Docker контейнер недоступен, запускаю миграцию напрямую...{Colors.END}")
@@ -660,25 +716,40 @@ def run_database_migration():
             print(f"{Colors.CYAN}📋 Логи миграции:{Colors.END}")
             
             try:
-                # Простой запуск без перехвата вывода - логи идут сразу
-                result = subprocess.run([
+                # Используем Popen для потокового вывода логов
+                process = subprocess.Popen([
                     sys.executable, "-u", migration_script, "--all", "--migrate"
-                ], timeout=300)  # 5 минут таймаут
+                ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
                 
-                if result.returncode == 0:
+                # Читаем логи в реальном времени
+                for line in process.stdout:
+                    print(line, end='')
+                    sys.stdout.flush()
+                
+                # Ждем завершения процесса
+                return_code = process.wait(timeout=300)  # 5 минут таймаут
+                
+                if return_code == 0:
                     print(f"\n{Colors.GREEN}✅ Миграция завершена успешно!{Colors.END}")
+                    migration_success = True
                 else:
                     print(f"\n{Colors.RED}❌ Миграция завершилась с ошибкой!{Colors.END}")
-                    print(f"{Colors.RED}Код возврата: {result.returncode}{Colors.END}")
+                    print(f"{Colors.RED}Код возврата: {return_code}{Colors.END}")
                         
             except subprocess.TimeoutExpired:
                 print(f"\n{Colors.YELLOW}⚠️ Миграция превысила время ожидания (5 минут){Colors.END}")
                 print(f"{Colors.CYAN}💡 Проверьте состояние базы данных вручную{Colors.END}")
+                if 'process' in locals():
+                    process.terminate()
             except Exception as e:
                 print(f"\n{Colors.RED}❌ Ошибка запуска миграции: {e}{Colors.END}")
+                if 'process' in locals():
+                    process.terminate()
         else:
             print(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}")
             print(f"{Colors.YELLOW}💡 Миграция пропущена{Colors.END}")
+    
+    return migration_success
 
 def is_running_in_container():
     """Проверяет, запущен ли скрипт внутри Docker контейнера"""
@@ -779,20 +850,43 @@ def run_initial_setup():
             docker_dir = "docker" if os.path.exists("docker/docker-compose.yml") else "."
             print(f"{Colors.CYAN}📁 Запускаю из папки: {docker_dir}{Colors.END}")
             
-            result = subprocess.run([
+            # Запускаем обновление в контейнере с ПОЛНЫМ выводом логов
+            print(f"{Colors.CYAN}📋 Запускаю обновление в контейнере...{Colors.END}")
+            print(f"{Colors.CYAN}📋 Логи обновления в контейнере:{Colors.END}")
+            
+            # Используем Popen для полного контроля над процессом
+            process = subprocess.Popen([
                 "docker", "compose", "exec", "coreness-service", 
                 "python", "core_updater.py", "--update"
-            ], cwd=docker_dir)
+            ], cwd=docker_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+               text=True, bufsize=1, universal_newlines=True)
             
-            if result.returncode == 0:
+            # Читаем ВСЕ логи в реальном времени
+            for line in iter(process.stdout.readline, ''):
+                print(line, end='')
+                sys.stdout.flush()
+            
+            # ЖДЕМ полного завершения процесса
+            return_code = process.wait()
+            
+            # Дополнительная проверка - ждем еще немного
+            time.sleep(1)
+            
+            if return_code == 0:
                 print(f"{Colors.GREEN}✅ Обновление завершено успешно в контейнере!{Colors.END}")
+                return  # ВЫХОДИМ, НЕ ЗАПУСКАЕМ НА ХОСТЕ!
             else:
                 print(f"{Colors.RED}❌ Обновление в контейнере завершилось с ошибкой{Colors.END}")
-                print(f"{Colors.YELLOW}💡 Fallback: запускаю обновление на хосте...{Colors.END}")
+                print(f"{Colors.RED}❌ Код возврата: {return_code}{Colors.END}")
+                print(f"{Colors.YELLOW}💡 Проверьте логи контейнера: docker compose logs -f coreness-service{Colors.END}")
+                # Только тогда запускаем на хосте
+                print(f"{Colors.CYAN}🖥 Запускаю обновление на хосте как fallback...{Colors.END}")
                 run_core_update()
         except Exception as e:
             print(f"{Colors.RED}❌ Ошибка запуска обновления в контейнере: {e}{Colors.END}")
-            print(f"{Colors.YELLOW}💡 Fallback: запускаю обновление на хосте...{Colors.END}")
+            print(f"{Colors.YELLOW}💡 Проверьте состояние контейнера: docker compose ps{Colors.END}")
+            # Только тогда запускаем на хосте
+            print(f"{Colors.CYAN}🖥 Запускаю обновление на хосте как fallback...{Colors.END}")
             run_core_update()
     else:
         print(f"{Colors.CYAN}🖥 Контейнер недоступен, запускаю обновление на хосте...{Colors.END}")
@@ -1270,7 +1364,7 @@ def run_core_update():
         
         # Запускаем миграцию базы данных
         print(f"\n{Colors.BLUE}=== ЭТАП: Миграция базы данных ==={Colors.END}")
-        run_database_migration()
+        migration_success = run_database_migration()
         
         # Спрашиваем про удаление бэкапа
         keep_backup = safe_input(f"\n{Colors.YELLOW}Удалить резервную копию? (Y/N, по умолчанию N): {Colors.END}").strip().lower() == 'y'
@@ -1283,7 +1377,13 @@ def run_core_update():
         print(f"\n{Colors.GREEN}🚀 Обновление завершено!{Colors.END}")
         print(f"{Colors.CYAN}💡 Все этапы выполнены успешно:{Colors.END}")
         print(f"{Colors.CYAN}   ✅ Файлы обновлены{Colors.END}")
-        print(f"{Colors.CYAN}   ✅ База данных мигрирована{Colors.END}")
+        
+        # Проверяем результат миграции
+        if migration_success:
+            print(f"{Colors.CYAN}   ✅ База данных мигрирована{Colors.END}")
+        else:
+            print(f"{Colors.YELLOW}   ⚠️ Миграция базы данных пропущена{Colors.END}")
+            
         print(f"{Colors.CYAN}   ✅ Проект готов к работе{Colors.END}")
         
     except Exception as e:
