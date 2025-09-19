@@ -106,6 +106,11 @@ SCRIPTS_CONFIG = {
     'migration_script': "tools/core/database_manager.py"
 }
 
+# Настройки отображения прогресса
+PROGRESS_CONFIG = {
+    'buffer_size': 10  # Размер буфера для динамического вывода (по умолчанию 10)
+}
+
 # Папки, которые не критичны для обновления (при ошибке - пропускаем)
 NON_CRITICAL_PATHS = [
     "tools",           # Вся папка tools (может быть заблокирована)
@@ -410,13 +415,22 @@ class DockerManager:
             self.messages.print_output(f"{Colors.CYAN}💡 Используем apt для установки Docker Engine...{Colors.END}\n")
             
             # Обновляем пакеты
-            subprocess.run(['sudo', 'apt', 'update'], check=True)
+            return_code = self.utils._run_with_progress_output(
+                ['sudo', 'apt', 'update'], 
+                "Обновление пакетов apt"
+            )
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка обновления пакетов{Colors.END}\n")
+                return False
             
             # Устанавливаем зависимости
-            subprocess.run([
+            return_code = self.utils._run_with_progress_output([
                 'sudo', 'apt', 'install', '-y', 
                 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg', 'lsb-release'
-            ], check=True)
+            ], "Установка зависимостей для Docker")
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка установки зависимостей{Colors.END}\n")
+                return False
             
             # Добавляем GPG ключ Docker
             subprocess.run(
@@ -431,8 +445,20 @@ class DockerManager:
             )
             
             # Обновляем пакеты и устанавливаем Docker
-            subprocess.run(['sudo', 'apt', 'update'], check=True)
-            subprocess.run(['sudo', 'apt', 'install', '-y', 'docker-ce', 'docker-ce-cli', 'containerd.io'], check=True)
+            return_code = self.utils._run_with_progress_output(
+                ['sudo', 'apt', 'update'], 
+                "Обновление репозиториев Docker"
+            )
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка обновления репозиториев{Colors.END}\n")
+                return False
+                
+            return_code = self.utils._run_with_progress_output([
+                'sudo', 'apt', 'install', '-y', 'docker-ce', 'docker-ce-cli', 'containerd.io'
+            ], "Установка Docker Engine")
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка установки Docker Engine{Colors.END}\n")
+                return False
             
             # Добавляем пользователя в группу docker
             subprocess.run(['sudo', 'usermod', '-aG', 'docker', os.getenv('USER')], check=True)
@@ -448,17 +474,41 @@ class DockerManager:
                 self.messages.print_output(f"{Colors.CYAN}💡 Используем yum для установки Docker Engine...{Colors.END}\n")
                 
                 # Устанавливаем зависимости
-                subprocess.run(['sudo', 'yum', 'install', '-y', 'yum-utils'], check=True)
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'yum', 'install', '-y', 'yum-utils'
+                ], "Установка yum-utils")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.RED}❌ Ошибка установки yum-utils{Colors.END}\n")
+                    return False
                 
                 # Добавляем репозиторий Docker
-                subprocess.run(['sudo', 'yum-config-manager', '--add-repo', 'https://download.docker.com/linux/centos/docker-ce.repo'], check=True)
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'yum-config-manager', '--add-repo', 'https://download.docker.com/linux/centos/docker-ce.repo'
+                ], "Добавление репозитория Docker")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.RED}❌ Ошибка добавления репозитория{Colors.END}\n")
+                    return False
                 
                 # Устанавливаем Docker
-                subprocess.run(['sudo', 'yum', 'install', '-y', 'docker-ce', 'docker-ce-cli', 'containerd.io'], check=True)
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'yum', 'install', '-y', 'docker-ce', 'docker-ce-cli', 'containerd.io'
+                ], "Установка Docker Engine через yum")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.RED}❌ Ошибка установки Docker Engine{Colors.END}\n")
+                    return False
                 
                 # Запускаем и включаем Docker
-                subprocess.run(['sudo', 'systemctl', 'start', 'docker'], check=True)
-                subprocess.run(['sudo', 'systemctl', 'enable', 'docker'], check=True)
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'systemctl', 'start', 'docker'
+                ], "Запуск Docker сервиса")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось запустить Docker сервис{Colors.END}\n")
+                
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'systemctl', 'enable', 'docker'
+                ], "Включение автозапуска Docker")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось включить автозапуск Docker{Colors.END}\n")
                 
                 # Добавляем пользователя в группу docker
                 subprocess.run(['sudo', 'usermod', '-aG', 'docker', os.getenv('USER')], check=True)
@@ -481,7 +531,12 @@ class DockerManager:
             subprocess.run(['which', 'brew'], check=True, capture_output=True)
             
             # Устанавливаем Docker Engine через Homebrew
-            subprocess.run(['brew', 'install', 'docker'], check=True)
+            return_code = self.utils._run_with_progress_output([
+                'brew', 'install', 'docker'
+            ], "Установка Docker Engine через Homebrew")
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка установки Docker Engine{Colors.END}\n")
+                return False
             
             self.messages.print_output(f"{Colors.GREEN}✅ Docker Engine установлен через Homebrew!{Colors.END}\n")
             self.messages.print_output(f"{Colors.YELLOW}⚠️ Запустите Docker Engine: brew services start docker{Colors.END}\n")
@@ -506,13 +561,14 @@ class DockerManager:
             
             # Запускаем установку команд
             self.messages.print_output(f"{Colors.CYAN}💡 Запускаем установку глобальных команд...{Colors.END}\n")
-            result = subprocess.run([coreness_script, 'install'], 
-                                 capture_output=True, text=True, check=True)
+            return_code = self.utils._run_with_progress_output(
+                [coreness_script, 'install'], 
+                "Установка глобальных команд"
+            )
             
-            # Выводим результат установки
-            if result.stdout:
-                self.messages.print_output(f"{Colors.GREEN}📋 Результат установки:{Colors.END}\n")
-                self.messages.print_output(result.stdout)
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка установки глобальных команд{Colors.END}\n")
+                return False
             
             # Команда уже установлена как 'coreness' (исправлен скрипт)
             self.messages.print_output(f"{Colors.GREEN}✅ Команда 'coreness' установлена{Colors.END}\n")
@@ -566,11 +622,26 @@ class DockerManager:
         try:
             # Собираем образ
             self.messages.print_output(f"{Colors.CYAN}💡 Собираем Docker образ...{Colors.END}\n")
-            subprocess.run(['docker', 'compose', 'build'], check=True, cwd=docker_dir)
+            
+            return_code = self.utils._run_with_progress_output(
+                ['docker', 'compose', 'build'], 
+                "Сборка Docker образа",
+                cwd=docker_dir
+            )
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка сборки Docker образа{Colors.END}\n")
+                return False
             
             # Запускаем контейнер
             self.messages.print_output(f"{Colors.CYAN}💡 Запускаем Docker контейнер...{Colors.END}\n")
-            subprocess.run(['docker', 'compose', 'up', '-d'], check=True, cwd=docker_dir)
+            return_code = self.utils._run_with_progress_output(
+                ['docker', 'compose', 'up', '-d'], 
+                "Запуск Docker контейнера",
+                cwd=docker_dir
+            )
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка запуска Docker контейнера{Colors.END}\n")
+                return False
             
             self.messages.print_output(f"{Colors.GREEN}✅ Docker контейнер запущен!{Colors.END}\n")
             return True
@@ -593,21 +664,33 @@ class DockerManager:
                 self.messages.print_output(f"{Colors.CYAN}💡 Запускаем Docker Engine на macOS...{Colors.END}\n")
                 # На macOS Docker Engine через Homebrew
                 try:
-                    subprocess.run(['brew', 'services', 'start', 'docker'], check=True)
-                    return True
-                except:
-                    # Fallback на Docker Desktop
-                    try:
-                        subprocess.run(['open', '-a', 'Docker'], check=True)
+                    return_code = self.utils._run_with_progress_output([
+                        'brew', 'services', 'start', 'docker'
+                    ], "Запуск Docker через Homebrew")
+                    if return_code == 0:
                         return True
-                    except:
-                        return False
+                except:
+                    pass
+                
+                # Fallback на Docker Desktop
+                try:
+                    return_code = self.utils._run_with_progress_output([
+                        'open', '-a', 'Docker'
+                    ], "Запуск Docker Desktop")
+                    if return_code == 0:
+                        return True
+                except:
+                    pass
+                
+                return False
                 
             elif system == "Linux":
                 self.messages.print_output(f"{Colors.CYAN}💡 Запускаем Docker Engine на Linux...{Colors.END}\n")
                 # На Linux Docker Engine как сервис
-                subprocess.run(['sudo', 'systemctl', 'start', 'docker'], check=True)
-                return True
+                return_code = self.utils._run_with_progress_output([
+                    'sudo', 'systemctl', 'start', 'docker'
+                ], "Запуск Docker сервиса")
+                return return_code == 0
                 
             else:
                 self.messages.print_output(f"{Colors.RED}❌ Неизвестная ОС: {system}{Colors.END}\n")
@@ -628,27 +711,60 @@ class DockerManager:
             # Проверяем, есть ли запущенные контейнеры
             running_result = subprocess.run(['docker', 'ps', '-q'], capture_output=True, text=True)
             if running_result.stdout.strip():
-                # Останавливаем все контейнеры
+                # Останавливаем все контейнеры с быстрой остановкой
                 self.messages.print_output(f"{Colors.CYAN}💡 Останавливаем контейнеры...{Colors.END}\n")
-                subprocess.run('docker stop $(docker ps -q)', shell=True, check=True)
+                
+                # Получаем список контейнеров для более детального вывода
+                containers = running_result.stdout.strip().split('\n')
+                self.messages.print_output(f"{Colors.CYAN}📋 Найдено контейнеров: {len(containers)}{Colors.END}\n")
+                
+                return_code = self.utils._run_with_progress_output(
+                    'docker stop --timeout=1 $(docker ps -q)', 
+                    "Остановка Docker контейнеров",
+                    buffer_size=5
+                )
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Некоторые контейнеры не удалось остановить{Colors.END}\n")
             else:
                 self.messages.print_output(f"{Colors.CYAN}💡 Нет запущенных контейнеров{Colors.END}\n")
             
             # Проверяем, есть ли контейнеры для удаления
             all_containers_result = subprocess.run(['docker', 'ps', '-aq'], capture_output=True, text=True)
             if all_containers_result.stdout.strip():
-                # Удаляем контейнеры
+                # Удаляем контейнеры с выводом логов
                 self.messages.print_output(f"{Colors.CYAN}💡 Удаляем контейнеры...{Colors.END}\n")
-                subprocess.run('docker rm $(docker ps -aq)', shell=True, check=True)
+                
+                # Получаем список контейнеров для более детального вывода
+                containers = all_containers_result.stdout.strip().split('\n')
+                self.messages.print_output(f"{Colors.CYAN}📋 Найдено контейнеров для удаления: {len(containers)}{Colors.END}\n")
+                
+                return_code = self.utils._run_with_progress_output(
+                    'docker rm -v $(docker ps -aq)', 
+                    "Удаление Docker контейнеров",
+                    buffer_size=5
+                )
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Некоторые контейнеры не удалось удалить{Colors.END}\n")
             else:
                 self.messages.print_output(f"{Colors.CYAN}💡 Нет контейнеров для удаления{Colors.END}\n")
             
             # Проверяем, есть ли образы для удаления
             images_result = subprocess.run(['docker', 'images', '-q'], capture_output=True, text=True)
             if images_result.stdout.strip():
-                # Удаляем образы
+                # Удаляем образы с принудительным удалением и выводом логов
                 self.messages.print_output(f"{Colors.CYAN}💡 Удаляем образы...{Colors.END}\n")
-                subprocess.run('docker rmi $(docker images -q)', shell=True, check=True)
+                
+                # Получаем список образов для более детального вывода
+                images = images_result.stdout.strip().split('\n')
+                self.messages.print_output(f"{Colors.CYAN}📋 Найдено образов для удаления: {len(images)}{Colors.END}\n")
+                
+                return_code = self.utils._run_with_progress_output(
+                    'docker rmi -f $(docker images -q)', 
+                    "Удаление Docker образов",
+                    buffer_size=5
+                )
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Некоторые образы не удалось удалить{Colors.END}\n")
             else:
                 self.messages.print_output(f"{Colors.CYAN}💡 Нет образов для удаления{Colors.END}\n")
             
@@ -690,6 +806,7 @@ class UtilityManager:
             'factory_configs': FACTORY_CONFIGS,
             'backup': BACKUP_CONFIG,
             'scripts': SCRIPTS_CONFIG,
+            'progress': PROGRESS_CONFIG,
             'non_critical_paths': NON_CRITICAL_PATHS,
             'dependency_packages': DEPENDENCY_PACKAGES
         }
@@ -741,18 +858,30 @@ class UtilityManager:
             self.messages.print_output(f"{Colors.GREEN}✅ Все зависимости уже установлены!{Colors.END}\n")
             return True
     
-    def _run_with_progress_output(self, command, description="Выполнение команды"):
+    def _run_with_progress_output(self, command, description="Выполнение команды", cwd=None, buffer_size=None):
         """Запускает команду с прогрессом и динамическим обновлением логов"""
         import time
         
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                  text=True, bufsize=1, universal_newlines=True)
+        # Определяем параметры для subprocess в зависимости от типа команды
+        if isinstance(command, str):
+            # Shell команда
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                      text=True, bufsize=0, universal_newlines=True, shell=True, cwd=cwd)
+        else:
+            # Команда как список
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                      text=True, bufsize=0, universal_newlines=True, cwd=cwd)
         
         self.messages.print_output(f"{Colors.CYAN}🔄 {description}...{Colors.END}\n")
         
+        # Очищаем буфер перед началом процесса
+        if buffer_size is None:
+            buffer_size = self.config['progress']['buffer_size']
+        self._clear_progress_display(buffer_size=buffer_size)
+        
         start_time = time.time()
         last_lines = []
-        max_lines = 10
+        max_lines = buffer_size * 2  # Сохраняем в 2 раза больше логов чем размер буфера
         
         while True:
             output = process.stdout.readline()
@@ -766,14 +895,22 @@ class UtilityManager:
                         last_lines.pop(0)
                     
                     # Обновляем вывод
-                    self._update_progress_display(last_lines, start_time, description)
+                    self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+            
+            # Принудительно очищаем буферы процесса
+            if hasattr(process.stdout, 'flush'):
+                process.stdout.flush()
         
-        # Финальный вывод
-        elapsed = int(time.time() - start_time)
+        # Ждем завершения процесса и получаем финальное время
+        process.wait()
+        end_time = time.time()
+        elapsed = int(end_time - start_time)
         return_code = process.returncode
         
-        # Очищаем экран и показываем финальный результат
-        self._clear_progress_display()
+        # Переходим в конец буфера для финального сообщения
+        sys.stdout.write(f'\033[{buffer_size}B')  # Переходим вниз на размер буфера
+        sys.stdout.write('\n')  # Добавляем пустую строку
+        sys.stdout.flush()
         
         if return_code == 0:
             self.messages.print_output(f"{Colors.GREEN}✅ {description} завершено за {elapsed}с{Colors.END}\n")
@@ -782,36 +919,46 @@ class UtilityManager:
         
         return return_code
 
-    def _update_progress_display(self, lines, start_time, description):
-        """Обновляет отображение прогресса с логами"""
+    def _update_progress_display(self, lines, start_time, description, buffer_size=10):
+        """Обновляет отображение прогресса с буфером"""
         import time
         
-        # Очищаем предыдущий вывод (переходим на начало строки)
-        sys.stdout.write('\r')
-        sys.stdout.write('\033[K')  # Очищаем текущую строку
+        # Очищаем весь буфер
+        for _ in range(buffer_size):
+            sys.stdout.write('\033[K')  # Очищаем строку
+            sys.stdout.write('\n')      # Переходим на следующую
+        
+        # Переходим вверх на размер буфера
+        sys.stdout.write(f'\033[{buffer_size}A')
         
         # Показываем время
         elapsed = int(time.time() - start_time)
         sys.stdout.write(f"{Colors.CYAN}⏱️ {elapsed}с | {description}{Colors.END}\n")
         
-        # Показываем последние строки
-        for line in lines[-8:]:  # Последние 8 строк
+        # Показываем последние строки (buffer_size - 1, так как одна строка для времени)
+        max_log_lines = buffer_size - 1
+        display_lines = lines[-max_log_lines:] if len(lines) >= max_log_lines else lines
+        for line in display_lines:
             # Обрезаем длинные строки
             if len(line) > 80:
                 line = line[:77] + "..."
             sys.stdout.write(f"{Colors.CYAN}   {line}{Colors.END}\n")
         
+        # Заполняем оставшиеся строки пустыми
+        remaining_lines = buffer_size - len(display_lines) - 1  # -1 для строки с временем
+        for _ in range(remaining_lines):
+            sys.stdout.write('\n')
+        
         # Перемещаем курсор вверх для следующего обновления
-        sys.stdout.write(f"\033[{len(lines[-8:]) + 1}A")  # Вверх на количество строк
+        sys.stdout.write(f'\033[{buffer_size}A')
         sys.stdout.flush()
 
-    def _clear_progress_display(self):
+    def _clear_progress_display(self, buffer_size=10):
         """Очищает отображение прогресса"""
-        # Просто переходим в конец блока прогресса
-        sys.stdout.write('\033[9B')  # Переходим вниз на 9 строк (в конец блока)
+        # Переходим в конец буфера
+        sys.stdout.write(f'\033[{buffer_size}B')  # Переходим вниз на размер буфера
         sys.stdout.write('\n')  # Добавляем пустую строку
         sys.stdout.flush()
-
 
     def _ensure_pip_available(self):
         """Проверяет и устанавливает pip если его нет, обновляет до последней версии"""
@@ -1010,8 +1157,8 @@ class UtilityManager:
         
         # Запускаем миграцию с прогрессом
         return_code = self._run_with_progress_output([
-            sys.executable, migration_script, "--migrate"
-        ], "Миграция базы данных")
+            sys.executable, migration_script, "--migrate", "--all"
+        ], "Миграция базы данных", buffer_size=15)
         
         if return_code == 0:
             self.messages.print_output(f"{Colors.GREEN}🎉 Миграция завершена успешно!{Colors.END}\n")
@@ -1649,7 +1796,6 @@ class CoreUpdater:
                 self.messages.print_output(f"{Colors.RED}❌ Не удалось удалить контейнер{Colors.END}\n")
                 return True
             
-            self.messages.print_output(f"{Colors.GREEN}🎉 Docker контейнеры и образы удалены!{Colors.END}\n")
             return True
             
         elif choice == '0':
