@@ -18,7 +18,7 @@ COMMAND_DESCRIPTION="Coreness - Управление системой"
 TOOLS_DIR="tools/core"
 DATABASE_MANAGER_SCRIPT="tools/database_manager.py"
 CORE_UPDATER_SCRIPT="tools/core/core_updater.py"
-DOCKER_COMPOSE_FILE="docker-compose.yml"
+DOCKER_COMPOSE_FILE="docker compose.yml"
 DOCKER_DIR="docker"
 MAIN_SCRIPT="main.py"
 
@@ -40,7 +40,7 @@ find_project_dir() {
         return 0
     fi
     
-    # Ищем папку с docker-compose.yml в текущей директории
+    # Ищем папку с docker compose.yml в текущей директории
     if [ -f "./$DOCKER_DIR/$DOCKER_COMPOSE_FILE" ]; then
         PROJECT_DIR="$(pwd)"
         return 0
@@ -131,6 +131,7 @@ install_commands() {
     echo -e "${GREEN}🎉 Глобальные команды установлены!${NC}"
     echo ""
     echo -e "${BLUE}Теперь вы можете использовать:${NC}"
+    echo "  $COMMAND_NAME install   # Установка команд"
     echo "  $COMMAND_NAME start     # Запуск"
     echo "  $COMMAND_NAME stop      # Остановка"
     echo "  $COMMAND_NAME restart   # Перезапуск"
@@ -139,6 +140,7 @@ install_commands() {
     echo "  $COMMAND_NAME update    # Обновление"
     echo "  $COMMAND_NAME db        # Работа с БД"
     echo "  $COMMAND_NAME shell     # Shell в контейнере"
+    echo "  $COMMAND_NAME help      # Справка"
 }
 
 # Функция для создания алиасов
@@ -179,12 +181,12 @@ start_service() {
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
     # Запускаем контейнер
-    if docker-compose up -d; then
+    if docker compose up -d; then
         echo -e "${GREEN}✅ Контейнер запущен${NC}"
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker-compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
+        if docker compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
             echo -e "${GREEN}✅ Сервис запущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер запущен, но приложение не стартовало${NC}"
@@ -207,7 +209,7 @@ stop_service() {
     
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
-    if docker-compose down; then
+    if docker compose down; then
         echo -e "${GREEN}✅ Сервис остановлен${NC}"
     else
         echo -e "${RED}❌ Ошибка остановки${NC}"
@@ -228,16 +230,16 @@ restart_service() {
     
     # Останавливаем контейнер
     echo -e "${YELLOW}🛑 Остановка...${NC}"
-    docker-compose down
+    docker compose down
     
     # Запускаем заново
     echo -e "${YELLOW}🚀 Запуск...${NC}"
-    if docker-compose up -d; then
+    if docker compose up -d; then
         echo -e "${GREEN}✅ Контейнер перезапущен${NC}"
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker-compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
+        if docker compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
             echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер перезапущен, но приложение не стартовало${NC}"
@@ -257,7 +259,7 @@ show_logs() {
     fi
     
     cd "$PROJECT_DIR/$DOCKER_DIR"
-    docker-compose logs -f
+    docker compose logs -f
 }
 
 # Универсальная функция для проверки статуса
@@ -270,7 +272,7 @@ show_status() {
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
     echo -e "${BLUE}📊 Статус $COMMAND_DESCRIPTION:${NC}"
-    docker-compose ps
+    docker compose ps
     
     echo -e "\n${BLUE}📈 Использование ресурсов:${NC}"
     docker stats --no-stream $CONTAINER_STATS_NAME 2>/dev/null || echo "Контейнер не запущен"
@@ -288,14 +290,14 @@ manage_database() {
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
     # Проверяем, что контейнер запущен
-    if ! docker-compose ps | grep -q "$CONTAINER_STATS_NAME.*Up"; then
+    if ! docker compose ps | grep -q "$CONTAINER_STATS_NAME.*Up"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
-        docker-compose up -d
+        docker compose up -d
     fi
     
     # Запускаем database_manager.py с переданными параметрами
     shift  # Убираем первый аргумент (db)
-    docker-compose exec $CONTAINER_NAME python $DATABASE_MANAGER_SCRIPT "$@"
+    docker compose exec $CONTAINER_NAME python $DATABASE_MANAGER_SCRIPT "$@"
 }
 
 # Универсальная функция для запуска shell в контейнере
@@ -310,13 +312,13 @@ open_shell() {
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
     # Проверяем, что контейнер запущен
-    if ! docker-compose ps | grep -q "$CONTAINER_STATS_NAME.*Up"; then
+    if ! docker compose ps | grep -q "$CONTAINER_STATS_NAME.*Up"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
-        docker-compose up -d
+        docker compose up -d
     fi
     
     # Запускаем bash в контейнере
-    docker-compose exec $CONTAINER_NAME bash
+    docker compose exec $CONTAINER_NAME bash
 }
 
 # Универсальная функция для обновления сервиса
