@@ -146,8 +146,7 @@ install_commands() {
         fi
     else
         # Если запущены из docker/, используем текущий скрипт
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        SCRIPT_PATH="$SCRIPT_DIR/coreness"
+        SCRIPT_PATH="${BASH_SOURCE[0]}"
     fi
     
     # Удаляем старую команду если существует
@@ -283,11 +282,38 @@ stop_app() {
         exit 1
     fi
     
-    # Убиваем все процессы main.py в контейнере
-    if docker exec $CONTAINER_STATS_NAME pkill -f "python3 $MAIN_SCRIPT"; then
+    # Проверяем, есть ли процессы приложения
+    PROCESSES=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    if [ -z "$PROCESSES" ]; then
+        echo -e "${YELLOW}⚠️ Приложение не запущено${NC}"
+        return 0
+    fi
+    
+    echo -e "${YELLOW}📋 Найдены процессы: $PROCESSES${NC}"
+    
+    # Сначала пытаемся мягко остановить (SIGTERM)
+    echo -e "${YELLOW}🔄 Отправка SIGTERM...${NC}"
+    docker exec $CONTAINER_STATS_NAME pkill -f "python3 $MAIN_SCRIPT"
+    
+    # Ждем 3 секунды
+    sleep 3
+    
+    # Проверяем, остановились ли процессы
+    REMAINING=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    if [ -n "$REMAINING" ]; then
+        echo -e "${YELLOW}⚠️ Процессы не остановились, отправка SIGKILL...${NC}"
+        docker exec $CONTAINER_STATS_NAME pkill -9 -f "python3 $MAIN_SCRIPT"
+        sleep 1
+    fi
+    
+    # Финальная проверка
+    FINAL_CHECK=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    if [ -z "$FINAL_CHECK" ]; then
         echo -e "${GREEN}✅ Приложение остановлено${NC}"
     else
-        echo -e "${YELLOW}⚠️ Приложение не было запущено${NC}"
+        echo -e "${RED}❌ Не удалось остановить приложение${NC}"
+        echo -e "${YELLOW}💡 Оставшиеся процессы: $FINAL_CHECK${NC}"
+        exit 1
     fi
 }
 
