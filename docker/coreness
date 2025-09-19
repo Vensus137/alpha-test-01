@@ -27,7 +27,7 @@ CONTAINER_NAME="coreness-service"
 CONTAINER_STATS_NAME="coreness-container"
 
 # Алиасы команд
-ALIASES=("coreness-start" "coreness-stop" "coreness-restart" "coreness-logs" "coreness-status" "coreness-update" "coreness-db" "coreness-shell")
+ALIASES=("coreness-start" "coreness-stop" "coreness-restart" "coreness-logs" "coreness-status" "coreness-update" "coreness-db" "coreness-shell" "coreness-kill")
 
 # Глобальная переменная для пути к проекту
 PROJECT_DIR=""
@@ -370,6 +370,32 @@ update_service() {
     python3 "$PROJECT_DIR/$CORE_UPDATER_SCRIPT"
 }
 
+# Универсальная функция для экстренной остановки
+emergency_stop() {
+    echo -e "${RED}💀 KILL ALL DOCKER${NC}"
+    echo -e "${YELLOW}⚠️ Убиваю ВСЕ Docker процессы!${NC}"
+    echo ""
+    
+    # Остановить все контейнеры
+    echo -e "${YELLOW}🛑 Останавливаю контейнеры...${NC}"
+    docker stop $(docker ps -q) 2>/dev/null || echo "Нет контейнеров"
+    
+    # Удалить все контейнеры
+    echo -e "${YELLOW}🗑 Удаляю контейнеры...${NC}"
+    docker rm $(docker ps -aq) 2>/dev/null || echo "Нет контейнеров"
+    
+    # Остановить Docker сервис
+    echo -e "${YELLOW}⏹ Останавливаю Docker...${NC}"
+    sudo systemctl stop docker 2>/dev/null || echo "Docker остановлен"
+    
+    # Убить все процессы Docker
+    echo -e "${YELLOW}💀 Убиваю процессы...${NC}"
+    sudo pkill -f docker 2>/dev/null || echo "Нет процессов"
+    
+    echo -e "${GREEN}✅ ВСЕ УБИТО!${NC}"
+    echo -e "${YELLOW}💡 Запуск: sudo systemctl start docker${NC}"
+}
+
 # Универсальная функция для показа справки
 show_help() {
     echo -e "${BLUE}$COMMAND_DESCRIPTION${NC}"
@@ -377,16 +403,17 @@ show_help() {
     echo "Использование: $COMMAND_NAME [команда] [параметры]"
     echo ""
     echo "Команды:"
-    echo "  install   Установить глобальные команды"
-    echo "  start     Запустить сервис (контейнер + приложение)"
-    echo "  stop      Остановить сервис"
-    echo "  restart   Перезапустить сервис"
-    echo "  logs      Показать логи контейнера"
-    echo "  status    Показать статус контейнера"
-    echo "  db        Работа с базой данных"
-    echo "  shell     Запустить shell в контейнере"
-    echo "  update    Обновить сервис"
-    echo "  help      Показать эту справку"
+    echo "  install         Установить глобальные команды"
+    echo "  start           Запустить сервис (контейнер + приложение)"
+    echo "  stop            Остановить сервис"
+    echo "  restart         Перезапустить сервис"
+    echo "  logs            Показать логи контейнера"
+    echo "  status          Показать статус контейнера"
+    echo "  db              Работа с базой данных"
+    echo "  shell           Запустить shell в контейнере"
+    echo "  update          Обновить сервис"
+    echo "  kill            💀 Убить ВСЕ Docker процессы"
+    echo "  help            Показать эту справку"
     echo ""
     echo "Примеры:"
     echo "  $COMMAND_NAME install                           # Установить команды"
@@ -396,6 +423,7 @@ show_help() {
     echo "  $COMMAND_NAME db --all --migrate                # Миграция БД"
     echo "  $COMMAND_NAME db actions --recreate-tables      # Пересоздать таблицу"
     echo "  $COMMAND_NAME shell                             # Shell в контейнере"
+    echo "  $COMMAND_NAME kill                              # 💀 Убить все Docker"
 }
 
 # Основная логика
@@ -433,6 +461,9 @@ main() {
             ;;
         update)
             update_service
+            ;;
+        kill)
+            emergency_stop
             ;;
         help|--help|-h)
             show_help
