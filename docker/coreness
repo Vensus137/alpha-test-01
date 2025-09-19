@@ -202,13 +202,18 @@ start_service() {
     if docker compose up -d; then
         echo -e "${GREEN}✅ Контейнер запущен${NC}"
         
-        # Запускаем main.py
-        echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
-            echo -e "${GREEN}✅ Сервис запущен и работает${NC}"
+        # Проверяем, работает ли приложение уже
+        if docker compose exec $CONTAINER_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null; then
+            echo -e "${GREEN}✅ Приложение уже работает${NC}"
         else
-            echo -e "${YELLOW}⚠️ Контейнер запущен, но приложение не стартовало${NC}"
-            echo -e "${YELLOW}💡 Проверьте логи: $COMMAND_NAME logs${NC}"
+            # Запускаем main.py
+            echo -e "${YELLOW}📱 Запуск приложения...${NC}"
+            if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
+                echo -e "${GREEN}✅ Сервис запущен и работает${NC}"
+            else
+                echo -e "${YELLOW}⚠️ Контейнер запущен, но приложение не стартовало${NC}"
+                echo -e "${YELLOW}💡 Проверьте логи: $COMMAND_NAME logs${NC}"
+            fi
         fi
     else
         echo -e "${RED}❌ Ошибка запуска контейнера${NC}"
@@ -246,26 +251,20 @@ restart_service() {
     
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
-    # Останавливаем контейнер
-    echo -e "${YELLOW}🛑 Остановка...${NC}"
-    docker compose down
+    # Убиваем все процессы main.py в контейнере
+    echo -e "${YELLOW}🛑 Остановка приложения...${NC}"
+    docker compose exec $CONTAINER_NAME pkill -f "python3 $MAIN_SCRIPT" 2>/dev/null || true
     
-    # Запускаем заново
-    echo -e "${YELLOW}🚀 Запуск...${NC}"
-    if docker compose up -d; then
-        echo -e "${GREEN}✅ Контейнер перезапущен${NC}"
-        
-        # Запускаем main.py
-        echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
-            echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
-        else
-            echo -e "${YELLOW}⚠️ Контейнер перезапущен, но приложение не стартовало${NC}"
-            echo -e "${YELLOW}💡 Проверьте логи: $COMMAND_NAME logs${NC}"
-        fi
+    # Ждем немного, чтобы процессы завершились
+    sleep 2
+    
+    # Запускаем main.py заново
+    echo -e "${YELLOW}📱 Запуск приложения...${NC}"
+    if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
+        echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
     else
-        echo -e "${RED}❌ Ошибка перезапуска контейнера${NC}"
-        exit 1
+        echo -e "${YELLOW}⚠️ Приложение не стартовало${NC}"
+        echo -e "${YELLOW}💡 Проверьте логи: $COMMAND_NAME logs${NC}"
     fi
 }
 
@@ -289,10 +288,29 @@ show_status() {
     
     cd "$PROJECT_DIR/$DOCKER_DIR"
     
-    echo -e "${BLUE}📊 Статус $COMMAND_DESCRIPTION:${NC}"
+    echo -e "${BLUE}📊 Статус контейнера:${NC}"
     docker compose ps
     
-    echo -e "\n${BLUE}📈 Использование ресурсов:${NC}"
+    echo -e "\n${BLUE}📱 Статус приложения:${NC}"
+    if docker compose exec $CONTAINER_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null; then
+        # Получаем информацию о процессе
+        PROCESS_INFO=$(docker compose exec $CONTAINER_NAME ps aux | grep "python3 $MAIN_SCRIPT" | grep -v grep)
+        if [ -n "$PROCESS_INFO" ]; then
+            PID=$(echo "$PROCESS_INFO" | awk '{print $2}')
+            CPU=$(echo "$PROCESS_INFO" | awk '{print $3}')
+            MEM=$(echo "$PROCESS_INFO" | awk '{print $4}')
+            TIME=$(echo "$PROCESS_INFO" | awk '{print $10}')
+            echo -e "${GREEN}✅ Приложение работает${NC}"
+            echo -e "   PID: $PID | CPU: $CPU% | MEM: $MEM% | TIME: $TIME"
+        else
+            echo -e "${YELLOW}⚠️ Процесс найден, но информация недоступна${NC}"
+        fi
+    else
+        echo -e "${RED}❌ Приложение не запущено${NC}"
+        echo -e "${YELLOW}💡 Запустите: $COMMAND_NAME start${NC}"
+    fi
+    
+    echo -e "\n${BLUE}📈 Использование ресурсов контейнера:${NC}"
     docker stats --no-stream $CONTAINER_STATS_NAME 2>/dev/null || echo "Контейнер не запущен"
 }
 
