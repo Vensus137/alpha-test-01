@@ -112,9 +112,21 @@ install_commands() {
         fi
     fi
     
-    # Получаем путь к текущему скрипту
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    SCRIPT_PATH="$SCRIPT_DIR/coreness"
+    # Получаем путь к исходному скрипту
+    # Если мы запущены из /usr/local/bin, ищем исходный скрипт в docker/
+    if [ "$(dirname "${BASH_SOURCE[0]}")" = "/usr/local/bin" ]; then
+        # Ищем проект и используем скрипт из docker/
+        if find_project_dir; then
+            SCRIPT_PATH="$PROJECT_DIR/docker/coreness"
+        else
+            echo -e "${RED}❌ Не удалось найти исходный скрипт coreness${NC}"
+            exit 1
+        fi
+    else
+        # Если запущены из docker/, используем текущий скрипт
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        SCRIPT_PATH="$SCRIPT_DIR/coreness"
+    fi
     
     # Удаляем старую команду если существует
     if [ -f "$INSTALL_DIR/$COMMAND_NAME" ]; then
