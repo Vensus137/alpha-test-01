@@ -116,6 +116,12 @@ install_commands() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SCRIPT_PATH="$SCRIPT_DIR/coreness"
     
+    # Удаляем старую команду если существует
+    if [ -f "$INSTALL_DIR/$COMMAND_NAME" ]; then
+        echo -e "${YELLOW}🔄 Обновляю существующую команду...${NC}"
+        rm "$INSTALL_DIR/$COMMAND_NAME"
+    fi
+    
     # Копируем основной скрипт
     if cp "$SCRIPT_PATH" "$INSTALL_DIR/$COMMAND_NAME"; then
         chmod +x "$INSTALL_DIR/$COMMAND_NAME"
@@ -186,7 +192,7 @@ start_service() {
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
+        if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
             echo -e "${GREEN}✅ Сервис запущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер запущен, но приложение не стартовало${NC}"
@@ -239,7 +245,7 @@ restart_service() {
         
         # Запускаем main.py
         echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-        if docker compose exec -d $CONTAINER_NAME python $MAIN_SCRIPT; then
+        if docker compose exec -d $CONTAINER_NAME python3 $MAIN_SCRIPT; then
             echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
         else
             echo -e "${YELLOW}⚠️ Контейнер перезапущен, но приложение не стартовало${NC}"
@@ -297,7 +303,7 @@ manage_database() {
     
     # Запускаем database_manager.py с переданными параметрами
     shift  # Убираем первый аргумент (db)
-    docker compose exec $CONTAINER_NAME python $DATABASE_MANAGER_SCRIPT "$@"
+    docker compose exec $CONTAINER_NAME python3 $DATABASE_MANAGER_SCRIPT "$@"
 }
 
 # Универсальная функция для запуска shell в контейнере
@@ -331,7 +337,7 @@ update_service() {
     fi
     
     # Запускаем core_updater.py
-    python "$PROJECT_DIR/$CORE_UPDATER_SCRIPT"
+    python3 "$PROJECT_DIR/$CORE_UPDATER_SCRIPT"
 }
 
 # Универсальная функция для показа справки
