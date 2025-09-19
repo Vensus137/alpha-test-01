@@ -74,18 +74,15 @@ VERSIONS = {
     }
 }
 
-# Папки и файлы для чистой синхронизации (удаляются и пересоздаются)
-CLEAN_SYNC_ITEMS = [
-    "plugins",              # Полная синхронизация всех плагинов
-    "tools",                # Полная синхронизация инструментов
-    "app",                  # Полная синхронизация приложения
-    "docker"                # Полная синхронизация Docker конфигурации
-]
-
-# Файлы из корня проекта (обновляются обычным способом)
-ROOT_FILES = [
-    "main.py",              # Главный файл приложения
-    "requirements.txt",     # Зависимости Python
+# Белый список - что обновляется (только эти пути)
+INCLUDED_PATHS = [
+    "app",                  # Папка приложения
+    "plugins",              # Папка плагинов
+    "tools",                # Папка инструментов
+    "docker",               # Папка Docker конфигурации
+    "data/ssl_certificates",# Подпапка сертификатов
+    "main.py",              # Главный файл
+    "requirements.txt",     # Зависимости
     "README.md",            # Документация
     "LICENSE_BASE",         # Лицензия Base версии
     "LICENSE_PRO",          # Лицензия Pro версии
@@ -96,17 +93,6 @@ ROOT_FILES = [
 FACTORY_CONFIGS = [
     "config/settings.yaml",
     "config/presets/default"
-]
-
-# Папки для исключения из обновления (всегда исключаются)
-EXCLUDE_PATHS = [
-    "logs",
-    "data", 
-    "resources",
-    ".git",
-    ".github",
-    ".gitignore",
-    ".core_update_backup*"  # Исключаем папки бэкапов
 ]
 
 # Настройки бэкапа
@@ -123,10 +109,6 @@ NON_CRITICAL_PATHS = [
 
 # Настройки зависимостей для разных модулей
 DEPENDENCY_PACKAGES = {
-    'base': [  # Базовые зависимости (встроенные модули Python)
-        'zipfile', 'tempfile', 'shutil', 'subprocess', 'os', 'sys', 
-        'platform', 'pathlib', 'datetime', 'io', 'locale'
-    ],
     'docker': [  # Зависимости для работы с Docker
         'requests'  # Для скачивания с GitHub
     ],
@@ -633,10 +615,8 @@ class UtilityManager:
         """Загружает конфигурацию"""
         return {
             'versions': VERSIONS,
-            'clean_sync_items': CLEAN_SYNC_ITEMS,
-            'root_files': ROOT_FILES,
+            'included_paths': INCLUDED_PATHS,
             'factory_configs': FACTORY_CONFIGS,
-            'exclude_paths': EXCLUDE_PATHS,
             'backup': BACKUP_CONFIG,
             'non_critical_paths': NON_CRITICAL_PATHS,
             'dependency_packages': DEPENDENCY_PACKAGES
@@ -663,11 +643,7 @@ class UtilityManager:
         if module_type not in self.config['dependency_packages']:
             raise ValueError(f"Неизвестный тип модуля: {module_type}")
         
-        # Объединяем базовые зависимости с модульными
-        base_packages = self.config['dependency_packages']['base']
-        module_packages = self.config['dependency_packages'][module_type]
-        
-        return base_packages + module_packages
+        return self.config['dependency_packages'][module_type]
     
     def check_dependencies(self, module_type):
         """Проверяет и устанавливает необходимые зависимости для модуля"""
@@ -676,21 +652,14 @@ class UtilityManager:
         
         missing_packages = []
         
-        # Проверяем каждый пакет
+        # Проверяем только внешние пакеты (встроенные модули всегда доступны)
         for package in required_packages:
             try:
-                if package in self.config['dependency_packages']['base']:
-                    # Встроенные модули Python
-                    __import__(package)
-                    self.messages.print_output(f"{Colors.GREEN}✅ {package} (встроенный модуль){Colors.END}\n")
-                else:
-                    # Внешние пакеты
-                    __import__(package)
-                    self.messages.print_output(f"{Colors.GREEN}✅ {package} (установлен){Colors.END}\n")
+                __import__(package)
+                self.messages.print_output(f"{Colors.GREEN}✅ {package} (установлен){Colors.END}\n")
             except ImportError:
-                if package not in self.config['dependency_packages']['base']:
-                    missing_packages.append(package)
-                    self.messages.print_output(f"{Colors.RED}❌ {package} (не найден){Colors.END}\n")
+                missing_packages.append(package)
+                self.messages.print_output(f"{Colors.RED}❌ {package} (не найден){Colors.END}\n")
         
         # Устанавливаем недостающие пакеты
         if missing_packages:
@@ -773,46 +742,91 @@ class UpdateManager:
         """Возвращает информацию о версии"""
         return self.config['versions'].get(version.lower())
     
+    def validate_github_token(self, token):
+        """Проверяет корректность GitHub токена"""
+        if not token:
+            return False, "Токен пустой"
+        
+        # Проверяем формат токена (должен начинаться с ghp_ или gho_ или ghu_)
+        if not token.startswith(('ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_')):
+            return False, "Неверный формат токена (должен начинаться с ghp_, gho_, ghu_, ghs_ или ghr_)"
+        
+        # Проверяем длину токена
+        if len(token) < 20:
+            return False, "Токен слишком короткий"
+        
+        # Проверяем токен через GitHub API
+        try:
+            import requests
+            headers = {"Authorization": f"token {token}"}
+            response = requests.get("https://api.github.com/user", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                return True, "Токен валиден"
+            elif response.status_code == 401:
+                return False, "Токен недействителен или истек"
+            elif response.status_code == 403:
+                return False, "Токен заблокирован или не имеет необходимых прав"
+            else:
+                return False, f"Ошибка проверки токена: {response.status_code}"
+                
+        except requests.exceptions.RequestException as e:
+            return False, f"Ошибка подключения к GitHub API: {e}"
+        except Exception as e:
+            return False, f"Неожиданная ошибка: {e}"
+    
     def get_github_token(self, version_info):
-        """Получает GitHub токен для версии"""
+        """Получает GitHub токен для версии с валидацией"""
         if version_info['update_token_env'] is None:
             self.messages.print_output(f"{Colors.CYAN}ℹ️ Base версия - публичный репозиторий, токен не требуется{Colors.END}\n")
             return None
         
         token_env = version_info['update_token_env']
         token = os.getenv(token_env)
+        
         if not token:
             self.messages.print_output(f"{Colors.YELLOW}⚠️ Переменная окружения {token_env} не установлена{Colors.END}\n")
             return None
-        return token
+        
+        # Проверяем токен из окружения
+        self.messages.print_output(f"{Colors.CYAN}🔍 Проверяю токен из переменной окружения {token_env}...{Colors.END}\n")
+        is_valid, message = self.validate_github_token(token)
+        
+        if is_valid:
+            self.messages.print_output(f"{Colors.GREEN}✅ {message}{Colors.END}\n")
+            return token
+        else:
+            self.messages.print_output(f"{Colors.RED}❌ Токен из окружения недействителен: {message}{Colors.END}\n")
+            return None
     
     def request_manual_token(self):
-        """Запрашивает токен вручную"""
+        """Запрашивает токен вручную с валидацией"""
         self.messages.print_output(f"\n{Colors.YELLOW}🔑 Введите GitHub токен:{Colors.END}\n")
+        self.messages.print_output(f"{Colors.CYAN}💡 Для отмены введите '0'{Colors.END}\n")
         
         while True:
             token = self.messages.safe_input("GitHub токен: ").strip()
-            if token:
+            
+            # Проверяем на отмену
+            if token == '0':
+                self.messages.print_output(f"{Colors.YELLOW}⚠️ Ввод токена отменен{Colors.END}\n")
+                return None
+            
+            if not token:
+                self.messages.print_output(f"{Colors.RED}❌ Токен не может быть пустым. Попробуйте снова.{Colors.END}\n")
+                continue
+            
+            # Проверяем токен
+            self.messages.print_output(f"{Colors.CYAN}🔍 Проверяю токен...{Colors.END}\n")
+            is_valid, message = self.validate_github_token(token)
+            
+            if is_valid:
+                self.messages.print_output(f"{Colors.GREEN}✅ {message}{Colors.END}\n")
                 return token
-            self.messages.print_output(f"{Colors.RED}❌ Токен не может быть пустым. Попробуйте снова.{Colors.END}\n")
+            else:
+                self.messages.print_output(f"{Colors.RED}❌ Токен недействителен: {message}{Colors.END}\n")
+                self.messages.print_output(f"{Colors.YELLOW}🔄 Попробуйте снова или введите '0' для отмены{Colors.END}\n")
     
-    def is_excluded(self, path):
-        """Проверяет, исключен ли путь из обновления"""
-        for excl in self.config['exclude_paths']:
-            if path == excl:
-                return True
-            if excl.endswith('*'):
-                pattern = excl[:-1]
-                if path.startswith(pattern):
-                    return True
-            if excl in path.split(os.sep):
-                return True
-        
-        return False
-    
-    def is_clean_sync_item(self, path):
-        """Проверяет, нужно ли полностью синхронизировать элемент"""
-        return path in self.config['clean_sync_items']
     
     def is_factory_config(self, path):
         """Проверяет, является ли путь заводским конфигом"""
@@ -824,6 +838,29 @@ class UpdateManager:
             if factory_path.startswith(path + "/"):
                 return True
         return False
+    
+    def get_all_paths_to_update(self, include_factory_configs=False):
+        """Возвращает полный список путей для обновления"""
+        paths = []
+        
+        # Добавляем основные включенные пути
+        for included_path in self.config['included_paths']:
+            paths.append({
+                'path': included_path,
+                'type': 'included',
+                'description': f"Обновляю: {included_path}"
+            })
+        
+        # Добавляем заводские конфиги (если нужно)
+        if include_factory_configs:
+            for factory_config in self.config['factory_configs']:
+                paths.append({
+                    'path': factory_config,
+                    'type': 'factory',
+                    'description': f"Обновляю заводской конфиг: {factory_config}"
+                })
+        
+        return paths
     
     def is_non_critical(self, path):
         """Проверяет, является ли путь некритичным для обновления"""
@@ -868,18 +905,33 @@ class UpdateManager:
                     raise e
     
     def copy_new(self, src, dst):
-        """Копирует новый файл или папку"""
+        """Копирует новый файл или папку с автоматическим созданием недостающих папок"""
         try:
             if os.path.isdir(src):
-                # Если папка назначения существует, используем dirs_exist_ok
+                # Создаем родительские папки если их нет
+                parent_dir = os.path.dirname(dst)
+                if parent_dir and not os.path.exists(parent_dir):
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Создаю родительскую папку: {parent_dir}{Colors.END}\n")
+                    os.makedirs(parent_dir, exist_ok=True)
+                
+                # Копируем папку
                 if os.path.exists(dst):
+                    self.messages.print_output(f"{Colors.CYAN}🔄 Обновляю существующую папку: {dst}{Colors.END}\n")
                     shutil.copytree(src, dst, dirs_exist_ok=True)
                 else:
+                    self.messages.print_output(f"{Colors.CYAN}📁 Создаю новую папку: {dst}{Colors.END}\n")
                     shutil.copytree(src, dst)
-                self.messages.print_output(f"{Colors.GREEN}📁 Скопирована папка: {dst}{Colors.END}\n")
+                self.messages.print_output(f"{Colors.GREEN}✅ Скопирована папка: {dst}{Colors.END}\n")
             else:
+                # Для файлов тоже создаем родительские папки
+                parent_dir = os.path.dirname(dst)
+                if parent_dir and not os.path.exists(parent_dir):
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Создаю родительскую папку: {parent_dir}{Colors.END}\n")
+                    os.makedirs(parent_dir, exist_ok=True)
+                
+                # Копируем файл
                 shutil.copy2(src, dst)
-                self.messages.print_output(f"{Colors.GREEN}📄 Скопирован файл: {dst}{Colors.END}\n")
+                self.messages.print_output(f"{Colors.GREEN}✅ Скопирован файл: {dst}{Colors.END}\n")
         except Exception as e:
             # Проверяем, является ли ошибка некритичной
             if self.is_non_critical(dst):
@@ -904,40 +956,39 @@ class UpdateManager:
         total_items = 0
         processed_items = 0
         
-        # Подсчитываем общее количество элементов
-        for item in os.listdir(self.project_root):
-            if not self.is_excluded(item):
-                if not include_factory_configs and self.is_factory_config(item):
-                    continue
-                total_items += 1
+        # Получаем полный список путей для резервного копирования
+        paths_to_backup = self.get_all_paths_to_update(include_factory_configs)
         
+        # Фильтруем только существующие пути
+        existing_paths = []
+        for path_info in paths_to_backup:
+            path = path_info['path']
+            project_path = os.path.join(self.project_root, path)
+            if os.path.exists(project_path):
+                existing_paths.append(path)
+        
+        total_items = len(existing_paths)
         self.messages.print_output(f"{Colors.CYAN}📁 Всего элементов для резервного копирования: {total_items}{Colors.END}\n")
         
-        # Копируем все файлы и папки
-        for item in os.listdir(self.project_root):
+        # Копируем элементы для резервного копирования
+        for backup_item in existing_paths:
             # Пропускаем папку бэкапа (чтобы избежать рекурсии)
-            if item.startswith(self.config['backup']['dir_name']):
-                continue
-                
-            if self.is_excluded(item):
-                continue
-                
-            if not include_factory_configs and self.is_factory_config(item):
+            if backup_item.startswith(self.config['backup']['dir_name']):
                 continue
                 
             try:
                 processed_items += 1
-                self.messages.print_output(f"{Colors.CYAN}🗂 Копирую {processed_items}/{total_items}: {item}{Colors.END}\n")
+                self.messages.print_output(f"{Colors.CYAN}🗂 Копирую {processed_items}/{total_items}: {backup_item}{Colors.END}\n")
                 
-                src_path = os.path.join(self.project_root, item)
-                backup_path = os.path.join(backup_dir, item)
+                src_path = os.path.join(self.project_root, backup_item)
+                backup_path = os.path.join(backup_dir, backup_item)
                 
                 if os.path.isdir(src_path):
                     shutil.copytree(src_path, backup_path, dirs_exist_ok=True)
                 else:
                     shutil.copy2(src_path, backup_path)
             except Exception as e:
-                self.messages.print_output(f"{Colors.RED}⚠️ Ошибка копирования {item}: {e}{Colors.END}\n")
+                self.messages.print_output(f"{Colors.RED}⚠️ Ошибка копирования {backup_item}: {e}{Colors.END}\n")
                 continue
         
         self.messages.print_output(f"{Colors.GREEN}✅ Резервное копирование завершено: {processed_items}/{total_items} элементов{Colors.END}\n")
@@ -1063,33 +1114,28 @@ class UpdateManager:
             if not repo_root:
                 raise Exception("Не удалось найти корневую папку исходников после распаковки!")
 
-            # Обновляем все файлы и папки из репозитория
-            self.messages.print_output(f"{Colors.YELLOW}♻️ Обновляю все файлы и папки...{Colors.END}\n")
+            # Обновляем все пути из белого списка
+            self.messages.print_output(f"{Colors.YELLOW}♻️ Обновляю включенные пути...{Colors.END}\n")
             non_critical_errors = []
             
-            for item in os.listdir(repo_root):
-                # Проверяем исключения
-                if self.is_excluded(item):
-                    self.messages.print_output(f"{Colors.CYAN}⏭ Пропускаю исключённый: {item}{Colors.END}\n")
-                    continue
+            # Получаем полный список путей для обновления
+            paths_to_update = self.get_all_paths_to_update(update_factory_configs)
+            
+            # Обновляем все пути
+            for path_info in paths_to_update:
+                path = path_info['path']
+                description = path_info['description']
                 
-                # Проверяем заводские конфиги
-                if not update_factory_configs and self.is_factory_config(item):
-                    self.messages.print_output(f"{Colors.CYAN}⏭ Пропускаю заводской конфиг: {item}{Colors.END}\n")
-                    continue
+                repo_path = os.path.join(repo_root, path)
+                project_path = os.path.join(self.project_root, path)
                 
-                abs_old = os.path.join(self.project_root, item)
-                abs_new = os.path.join(repo_root, item)
-                
-                # Проверяем тип синхронизации
-                if self.is_clean_sync_item(item):
-                    self.messages.print_output(f"{Colors.YELLOW}🗑 Чистая синхронизация: {item}{Colors.END}\n")
-                    self.remove_old(abs_old)
-                    self.copy_new(abs_new, abs_old)
+                # Проверяем, существует ли путь в репозитории
+                if os.path.exists(repo_path):
+                    self.messages.print_output(f"{Colors.CYAN}♻️ {description}{Colors.END}\n")
+                    self.remove_old(project_path)
+                    self.copy_new(repo_path, project_path)
                 else:
-                    self.messages.print_output(f"{Colors.CYAN}♻️ Обновляю: {item}{Colors.END}\n")
-                    self.remove_old(abs_old)
-                    self.copy_new(abs_new, abs_old)
+                    self.messages.print_output(f"{Colors.YELLOW}⏭️ Пропускаем (не найден в репозитории): {path}{Colors.END}\n")
             
             # Если были некритичные ошибки, сообщаем об этом
             if non_critical_errors:
@@ -1143,6 +1189,11 @@ class UpdateManager:
                 self.messages.print_output(f"{Colors.YELLOW}❌ Не удалось получить токен из окружения{Colors.END}\n")
                 self.messages.print_output(f"{Colors.CYAN}ℹ️ Пробую запросить токен вручную...{Colors.END}\n")
                 github_token = self.request_manual_token()
+                
+                # Проверяем, не отменил ли пользователь ввод
+                if github_token is None:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Обновление отменено пользователем{Colors.END}\n")
+                    return False
             
             # Скачиваем и обновляем
             self.download_and_update(version_info, github_token, update_factory_configs)
@@ -1196,7 +1247,14 @@ class CoreUpdater:
         project_root = self.utils.get_project_root()
         
         self.messages.print_output(f"{Colors.CYAN}📁 Скрипт находится в: {script_path.parent}{Colors.END}\n")
-        self.messages.print_output(f"{Colors.CYAN}📁 Рабочая папка: {Path.cwd()}{Colors.END}\n")
+        
+        # Безопасно получаем рабочую директорию
+        try:
+            current_dir = Path.cwd()
+            self.messages.print_output(f"{Colors.CYAN}📁 Рабочая папка: {current_dir}{Colors.END}\n")
+        except FileNotFoundError:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Рабочая папка недоступна (возможно, удалена){Colors.END}\n")
+        
         self.messages.print_output(f"{Colors.CYAN}📁 Корень проекта: {project_root}{Colors.END}\n")
         
         return self.utils.is_in_project_root()
@@ -1326,35 +1384,38 @@ class CoreUpdater:
             return True
         elif choice == '0':
             self.messages.print_output(f"{Colors.BLUE}До свидания!{Colors.END}\n")
-            sys.exit(0)
+            return True  # Возвращаем True для выхода из главного цикла
         else:
             self.messages.print_output(f"{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
             return False
 
     def main_menu(self):
         """Главное меню приложения"""
-        self.messages.print_header()
-        
-        # Проверяем местоположение скрипта и показываем предупреждение
-        is_root = self.check_location()
-        
-        # Показываем предупреждение только если скрипт в корне проекта
-        if is_root:
-            self.messages.print_output(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Скрипт запущен из корня проекта!{Colors.END}\n")
-            self.messages.print_output(f"{Colors.YELLOW}   Развертывание и обновление будет происходить в текущей папке.{Colors.END}\n")
-            self.messages.print_output(f"{Colors.YELLOW}   Убедитесь, что это правильная папка для проекта Coreness.{Colors.END}\n")
-            self.messages.print_output(f"{Colors.CYAN}💡 Если это не так, переместите скрипт в папку tools/core{Colors.END}\n")
-        
-        self.messages.print_output(f"{Colors.YELLOW}Выберите действие:{Colors.END}\n")
-        
-        # Показываем опции меню (одинаковые для всех случаев)
-        self._show_menu_options()
-        
-        # Общая логика обработки выбора
         while True:
+            self.messages.print_header()
+            
+            # Проверяем местоположение скрипта и показываем предупреждение
+            is_root = self.check_location()
+            
+            # Показываем предупреждение только если скрипт в корне проекта
+            if is_root:
+                self.messages.print_output(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Скрипт запущен из корня проекта!{Colors.END}\n")
+                self.messages.print_output(f"{Colors.YELLOW}   Развертывание и обновление будет происходить в текущей папке.{Colors.END}\n")
+                self.messages.print_output(f"{Colors.YELLOW}   Убедитесь, что это правильная папка для проекта Coreness.{Colors.END}\n")
+                self.messages.print_output(f"{Colors.CYAN}💡 Если это не так, переместите скрипт в папку tools/core{Colors.END}\n")
+            
+            self.messages.print_output(f"{Colors.YELLOW}Выберите действие:{Colors.END}\n")
+            
+            # Показываем опции меню (одинаковые для всех случаев)
+            self._show_menu_options()
+            
+            # Общая логика обработки выбора
             choice = self.messages.safe_input(f"{Colors.YELLOW}Введите номер (0-3): {Colors.END}")
             if self._handle_menu_choice(choice):
-                break
+                # Если выбор был "0" (выход), прерываем цикл
+                if choice == '0':
+                    break
+                # Иначе продолжаем цикл (возвращаемся в меню без дополнительных действий)
 
 if __name__ == "__main__":
     # Создаем экземпляр класса
