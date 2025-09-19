@@ -232,7 +232,7 @@ class DIContainer:
         missing_deps = []
         
         for dep_name in dependencies:
-            dep_instance = self.get_utility(dep_name)
+            dep_instance = self.get_utility_on_demand(dep_name)
             if dep_instance:
                 # Если это логгер, создаем именованный логгер для утилиты
                 if dep_name == 'logger' and utility_name != 'logger':
@@ -275,7 +275,7 @@ class DIContainer:
         
         for dep_name in dependencies:
             # Сервисы могут зависеть от утилит
-            dep_instance = self.get_utility(dep_name)
+            dep_instance = self.get_utility_on_demand(dep_name)
             if dep_instance:
                 # Если это логгер, создаем именованный логгер для сервиса
                 if dep_name == 'logger':
