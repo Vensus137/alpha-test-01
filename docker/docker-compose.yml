@@ -4,6 +4,8 @@ services:
       context: ..                    # Контекст сборки - корень проекта
       dockerfile: docker/Dockerfile  # Путь к Dockerfile
     container_name: coreness-container
+    env_file:
+      - ../.env                      # Загружаем переменные из .env файла
     volumes:
       - ../:/workspace               # Монтируем весь проект в /workspace
     command: ["tail", "-f", "/dev/null"]  # Держим контейнер живым
