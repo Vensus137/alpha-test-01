@@ -46,10 +46,15 @@ class TgEventBot:
         self.logger.info("▶️ старт polling Telegram событий (aiogram Dispatcher)")
         
         try:
+            # Проверяем доступность бота перед запуском polling
+            bot = self.tg_bot_initializer.get_bot()
+            if not bot:
+                self.logger.error("❌ Бот недоступен, polling не запускается")
+                return
+            
             dp = Dispatcher()
             router = self._create_router()
             dp.include_router(router)
-            bot = self.tg_bot_initializer.get_bot()
             await dp.start_polling(bot)
         except Exception as e:
             self.logger.error(f"Ошибка в polling Telegram событий: {e}")
