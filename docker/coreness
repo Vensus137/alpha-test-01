@@ -18,7 +18,7 @@ COMMAND_DESCRIPTION="Coreness - Управление системой"
 TOOLS_DIR="tools/core"
 DATABASE_MANAGER_SCRIPT="tools/database_manager.py"
 CORE_UPDATER_SCRIPT="tools/core/core_updater.py"
-DOCKER_COMPOSE_FILE="docker compose.yml"
+DOCKER_COMPOSE_FILE="docker-compose.yml"
 DOCKER_DIR="docker"
 MAIN_SCRIPT="main.py"
 

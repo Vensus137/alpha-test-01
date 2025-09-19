@@ -1732,11 +1732,16 @@ class CoreUpdater:
         else:
             self.messages.print_output(f"{Colors.CYAN}ℹ️ Скрипт запущен из tools/core, очистка не требуется{Colors.END}\n")
 
+    def _show_menu_info(self):
+        """Показывает информационное сообщение о пунктах меню"""
+        self.messages.print_output(f"{Colors.CYAN}💡 Рекомендуемый порядок: 2 → 3 → 4{Colors.END}\n")
+        self.messages.print_output(f"{Colors.CYAN}   Для работы в контейнере используйте пункт 1{Colors.END}\n")
+
     def _show_menu_options(self):
         """Показывает опции меню"""
         self.messages.print_output("1) 🐳 Работа с Docker\n")
         self.messages.print_output("2) 🔄 Обновление данных\n")
-        self.messages.print_output("3) 🗄 Миграция базы данных\n")
+        self.messages.print_output("3) 🗄 Миграция базы данных (создание и обновление)\n")
         self.messages.print_output("4) 📦 Установка зависимостей\n")
         self.messages.print_output("0) Выход\n")
 
@@ -1869,6 +1874,9 @@ class CoreUpdater:
                 self.messages.print_output(f"{Colors.CYAN}💡 Если это не так, переместите скрипт в папку tools/core{Colors.END}\n")
             
             self.messages.print_output(f"{Colors.YELLOW}Выберите действие:{Colors.END}\n")
+            
+            # Показываем информационное сообщение
+            self._show_menu_info()
             
             # Показываем опции меню (одинаковые для всех случаев)
             self._show_menu_options()
