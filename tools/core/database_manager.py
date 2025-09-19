@@ -233,11 +233,8 @@ def main():
     di_container = DIContainer(logger=logger, plugins_manager=plugins_manager, settings_manager=settings_manager)
     
     try:
-        # Инициализация всех плагинов через DI-контейнер
-        di_container.initialize_all_plugins()
-        
-        # Получение необходимых утилит и сервисов
-        db_service = di_container.get_utility("database_service")
+        # Получение необходимых утилит и сервисов с автоматической инициализацией зависимостей
+        db_service = di_container.get_utility_on_demand("database_service")
         if not db_service:
             print("❌ Ошибка: не удалось получить database_service из DI-контейнера")
             sys.exit(1)

@@ -101,6 +101,11 @@ BACKUP_CONFIG = {
     'dir_name': ".core_update_backup"
 }
 
+# Настройки скриптов
+SCRIPTS_CONFIG = {
+    'migration_script': "tools/core/database_manager.py"
+}
+
 # Папки, которые не критичны для обновления (при ошибке - пропускаем)
 NON_CRITICAL_PATHS = [
     "tools",           # Вся папка tools (может быть заблокирована)
@@ -120,6 +125,72 @@ DEPENDENCY_PACKAGES = {
         'aiosqlite',   # Асинхронный SQLite
         'pyyaml'       # Для работы с YAML конфигами
     ]
+}
+
+# Системные зависимости для разных ОС
+SYSTEM_DEPENDENCIES = {
+    'linux': {
+        'ffmpeg': {
+            'package': 'ffmpeg',
+            'command': ['sudo', 'apt', 'install', '-y', 'ffmpeg'],
+            'check_command': ['ffmpeg', '-version'],
+            'description': 'Обработка аудио и видео'
+        },
+        'git': {
+            'package': 'git',
+            'command': ['sudo', 'apt', 'install', '-y', 'git'],
+            'check_command': ['git', '--version'],
+            'description': 'Система контроля версий'
+        },
+        'libmagic': {
+            'package': 'libmagic1 libmagic-dev',
+            'command': ['sudo', 'apt', 'install', '-y', 'libmagic1', 'libmagic-dev'],
+            'check_command': ['python3', '-c', 'import magic'],
+            'description': 'Определение MIME-типов файлов'
+        }
+    },
+    'darwin': {  # macOS
+        'ffmpeg': {
+            'package': 'ffmpeg',
+            'command': ['brew', 'install', 'ffmpeg'],
+            'check_command': ['ffmpeg', '-version'],
+            'description': 'Обработка аудио и видео'
+        },
+        'git': {
+            'package': 'git',
+            'command': ['brew', 'install', 'git'],
+            'check_command': ['git', '--version'],
+            'description': 'Система контроля версий'
+        },
+        'libmagic': {
+            'package': 'libmagic',
+            'command': ['brew', 'install', 'libmagic'],
+            'check_command': ['python3', '-c', 'import magic'],
+            'description': 'Определение MIME-типов файлов'
+        }
+    },
+    'windows': {
+        'ffmpeg': {
+            'package': 'ffmpeg',
+            'command': None,  # Не поддерживается автоматическая установка
+            'check_command': ['ffmpeg', '-version'],
+            'description': 'Обработка аудио и видео',
+            'manual_install': 'https://ffmpeg.org/download.html'
+        },
+        'git': {
+            'package': 'git',
+            'command': None,  # Не поддерживается автоматическая установка
+            'check_command': ['git', '--version'],
+            'description': 'Система контроля версий',
+            'manual_install': 'https://git-scm.com/download/win'
+        },
+        'libmagic': {
+            'package': 'python-magic-bin',
+            'command': [sys.executable, '-m', 'pip', 'install', 'python-magic-bin'],
+            'check_command': ['python', '-c', 'import magic'],
+            'description': 'Определение MIME-типов файлов'
+        }
+    }
 }
 
 # Цвета для вывода
@@ -618,6 +689,7 @@ class UtilityManager:
             'included_paths': INCLUDED_PATHS,
             'factory_configs': FACTORY_CONFIGS,
             'backup': BACKUP_CONFIG,
+            'scripts': SCRIPTS_CONFIG,
             'non_critical_paths': NON_CRITICAL_PATHS,
             'dependency_packages': DEPENDENCY_PACKAGES
         }
@@ -669,44 +741,126 @@ class UtilityManager:
             self.messages.print_output(f"{Colors.GREEN}✅ Все зависимости уже установлены!{Colors.END}\n")
             return True
     
+    def _run_with_progress_output(self, command, description="Выполнение команды"):
+        """Запускает команду с прогрессом и динамическим обновлением логов"""
+        import time
+        
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                  text=True, bufsize=1, universal_newlines=True)
+        
+        self.messages.print_output(f"{Colors.CYAN}🔄 {description}...{Colors.END}\n")
+        
+        start_time = time.time()
+        last_lines = []
+        max_lines = 10
+        
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                line = output.strip()
+                if line:  # Только непустые строки
+                    last_lines.append(line)
+                    if len(last_lines) > max_lines:
+                        last_lines.pop(0)
+                    
+                    # Обновляем вывод
+                    self._update_progress_display(last_lines, start_time, description)
+        
+        # Финальный вывод
+        elapsed = int(time.time() - start_time)
+        return_code = process.returncode
+        
+        # Очищаем экран и показываем финальный результат
+        self._clear_progress_display()
+        
+        if return_code == 0:
+            self.messages.print_output(f"{Colors.GREEN}✅ {description} завершено за {elapsed}с{Colors.END}\n")
+        else:
+            self.messages.print_output(f"{Colors.RED}❌ {description} завершено с ошибкой за {elapsed}с{Colors.END}\n")
+        
+        return return_code
+
+    def _update_progress_display(self, lines, start_time, description):
+        """Обновляет отображение прогресса с логами"""
+        import time
+        
+        # Очищаем предыдущий вывод (переходим на начало строки)
+        sys.stdout.write('\r')
+        sys.stdout.write('\033[K')  # Очищаем текущую строку
+        
+        # Показываем время
+        elapsed = int(time.time() - start_time)
+        sys.stdout.write(f"{Colors.CYAN}⏱️ {elapsed}с | {description}{Colors.END}\n")
+        
+        # Показываем последние строки
+        for line in lines[-8:]:  # Последние 8 строк
+            # Обрезаем длинные строки
+            if len(line) > 80:
+                line = line[:77] + "..."
+            sys.stdout.write(f"{Colors.CYAN}   {line}{Colors.END}\n")
+        
+        # Перемещаем курсор вверх для следующего обновления
+        sys.stdout.write(f"\033[{len(lines[-8:]) + 1}A")  # Вверх на количество строк
+        sys.stdout.flush()
+
+    def _clear_progress_display(self):
+        """Очищает отображение прогресса"""
+        # Просто переходим в конец блока прогресса
+        sys.stdout.write('\033[9B')  # Переходим вниз на 9 строк (в конец блока)
+        sys.stdout.write('\n')  # Добавляем пустую строку
+        sys.stdout.flush()
+
+
+    def _ensure_pip_available(self):
+        """Проверяет и устанавливает pip если его нет, обновляет до последней версии"""
+        self.messages.print_output(f"{Colors.CYAN}🔄 Проверяю pip...{Colors.END}\n")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "--version"], 
+                         capture_output=True, text=True, check=True)
+            self.messages.print_output(f"{Colors.GREEN}✅ pip доступен{Colors.END}\n")
+        except:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ pip не найден, устанавливаю...{Colors.END}\n")
+            try:
+                # Устанавливаем pip через get-pip.py
+                subprocess.run([
+                    sys.executable, "-c", 
+                    "import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')"
+                ], check=True)
+                subprocess.run([sys.executable, "get-pip.py"], check=True)
+                self.messages.print_output(f"{Colors.GREEN}✅ pip установлен{Colors.END}\n")
+            except Exception as e:
+                self.messages.print_output(f"{Colors.RED}❌ Не удалось установить pip: {e}{Colors.END}\n")
+                return False
+        
+        # Обновляем pip до последней версии
+        return_code = self._run_with_progress_output(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
+            "Обновление pip до последней версии"
+        )
+        
+        if return_code != 0:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось обновить pip, продолжаем...{Colors.END}\n")
+        
+        return True
+
     def _install_packages(self, packages):
         """Устанавливает недостающие пакеты"""
         try:
             # Проверяем и устанавливаем pip если его нет
-            self.messages.print_output(f"{Colors.CYAN}🔄 Проверяю pip...{Colors.END}\n")
-            try:
-                subprocess.run([sys.executable, "-m", "pip", "--version"], 
-                             capture_output=True, text=True, check=True)
-                self.messages.print_output(f"{Colors.GREEN}✅ pip доступен{Colors.END}\n")
-            except:
-                self.messages.print_output(f"{Colors.YELLOW}⚠️ pip не найден, устанавливаю...{Colors.END}\n")
-                try:
-                    # Устанавливаем pip через get-pip.py
-                    subprocess.run([
-                        sys.executable, "-c", 
-                        "import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')"
-                    ], check=True)
-                    subprocess.run([sys.executable, "get-pip.py"], check=True)
-                    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-                    self.messages.print_output(f"{Colors.GREEN}✅ pip установлен{Colors.END}\n")
-                except Exception as e:
-                    self.messages.print_output(f"{Colors.RED}❌ Не удалось установить pip: {e}{Colors.END}\n")
-                    return False
+            if not self._ensure_pip_available():
+                return False
             
             # Устанавливаем недостающие пакеты
             for package in packages:
-                self.messages.print_output(f"{Colors.CYAN}💡 Устанавливаю {package}...{Colors.END}\n")
+                return_code = self._run_with_progress_output(
+                    [sys.executable, "-m", "pip", "install", package],
+                    f"Установка {package}"
+                )
                 
-                result = subprocess.run([
-                    sys.executable, "-m", "pip", "install", package
-                ], capture_output=True, text=True)
-                
-                if result.returncode == 0:
-                    self.messages.print_output(f"{Colors.GREEN}✅ {package} установлен{Colors.END}\n")
-                else:
-                    self.messages.print_output(f"{Colors.RED}❌ Ошибка установки {package}:{Colors.END}\n")
-                    self.messages.print_output(f"{Colors.RED}   stdout: {result.stdout}{Colors.END}\n")
-                    self.messages.print_output(f"{Colors.RED}   stderr: {result.stderr}{Colors.END}\n")
+                if return_code != 0:
+                    self.messages.print_output(f"{Colors.RED}❌ Ошибка установки {package}{Colors.END}\n")
                     return False
             
             self.messages.print_output(f"{Colors.GREEN}🎉 Все зависимости установлены!{Colors.END}\n")
@@ -714,6 +868,156 @@ class UtilityManager:
             
         except Exception as e:
             self.messages.print_output(f"{Colors.RED}❌ Критическая ошибка установки зависимостей: {e}{Colors.END}\n")
+            return False
+
+    def _check_system_dependency(self, dep_name, dep_info):
+        """Проверяет наличие системной зависимости"""
+        try:
+            subprocess.run(dep_info['check_command'], capture_output=True, check=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    def _install_system_dependency(self, dep_name, dep_info, system):
+        """Устанавливает системную зависимость"""
+        if dep_info['command'] is None:
+            # Ручная установка
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ {dep_name} требует ручной установки{Colors.END}\n")
+            if 'manual_install' in dep_info:
+                self.messages.print_output(f"{Colors.CYAN}💡 Скачайте с: {dep_info['manual_install']}{Colors.END}\n")
+            return False
+        
+        return_code = self._run_with_progress_output(
+            dep_info['command'],
+            f"Установка {dep_name}"
+        )
+        
+        return return_code == 0
+
+    def _handle_system_dependencies(self):
+        """Проверяет и устанавливает системные зависимости"""
+        system = platform.system().lower()
+        
+        if system not in SYSTEM_DEPENDENCIES:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Неподдерживаемая ОС: {system}{Colors.END}\n")
+            return True
+        
+        self.messages.print_output(f"{Colors.CYAN}🔧 Проверяю системные зависимости для {system}...{Colors.END}\n")
+        
+        system_deps = SYSTEM_DEPENDENCIES[system]
+        missing_deps = []
+        
+        # Проверяем каждую зависимость
+        for dep_name, dep_info in system_deps.items():
+            if self._check_system_dependency(dep_name, dep_info):
+                self.messages.print_output(f"{Colors.GREEN}✅ {dep_name} найден{Colors.END}\n")
+            else:
+                self.messages.print_output(f"{Colors.YELLOW}⚠️ {dep_name} не найден{Colors.END}\n")
+                missing_deps.append((dep_name, dep_info))
+        
+        # Если есть недостающие зависимости
+        if missing_deps:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Найдены недостающие зависимости: {', '.join([dep[0] for dep in missing_deps])}{Colors.END}\n")
+            
+            # Предлагаем установить автоматически (кроме Windows)
+            if system in ['linux', 'darwin']:
+                install = self.messages.safe_input(f"{Colors.YELLOW}Попробовать установить автоматически? (Y/N): {Colors.END}")
+                if install.lower() == 'y':
+                    self.messages.print_output(f"{Colors.CYAN}📦 Устанавливаю недостающие зависимости...{Colors.END}\n")
+                    
+                    for dep_name, dep_info in missing_deps:
+                        if not self._install_system_dependency(dep_name, dep_info, system):
+                            # Если не удалось установить автоматически, показываем инструкции
+                            self._show_manual_instructions(dep_name, dep_info, system)
+                else:
+                    # Показываем инструкции для всех недостающих
+                    for dep_name, dep_info in missing_deps:
+                        self._show_manual_instructions(dep_name, dep_info, system)
+            else:
+                # Для Windows показываем только инструкции
+                for dep_name, dep_info in missing_deps:
+                    self._show_manual_instructions(dep_name, dep_info, system)
+        
+        return True
+
+    def _show_manual_instructions(self, dep_name, dep_info, system):
+        """Показывает инструкции по ручной установке"""
+        self.messages.print_output(f"{Colors.CYAN}💡 Инструкции по установке {dep_name}:{Colors.END}\n")
+        self.messages.print_output(f"{Colors.CYAN}   Описание: {dep_info['description']}{Colors.END}\n")
+        
+        if system == 'linux':
+            self.messages.print_output(f"{Colors.CYAN}   Ubuntu/Debian: sudo apt install {dep_info['package']}{Colors.END}\n")
+        elif system == 'darwin':
+            self.messages.print_output(f"{Colors.CYAN}   macOS: brew install {dep_info['package']}{Colors.END}\n")
+        elif system == 'windows':
+            if 'manual_install' in dep_info:
+                self.messages.print_output(f"{Colors.CYAN}   Windows: {dep_info['manual_install']}{Colors.END}\n")
+            else:
+                self.messages.print_output(f"{Colors.CYAN}   Windows: pip install {dep_info['package']}{Colors.END}\n")
+
+    def install_project_dependencies(self):
+        """Устанавливает все зависимости проекта из requirements.txt"""
+        self.messages.print_output(f"{Colors.BLUE}=== УСТАНОВКА ЗАВИСИМОСТЕЙ ПРОЕКТА ==={Colors.END}\n")
+        
+        # Проверяем наличие файла requirements.txt
+        requirements_file = os.path.join(self.project_root, "requirements.txt")
+        if not os.path.exists(requirements_file):
+            self.messages.print_output(f"{Colors.RED}❌ Файл requirements.txt не найден в корне проекта!{Colors.END}\n")
+            self.messages.print_output(f"{Colors.CYAN}💡 Ожидаемый путь: {requirements_file}{Colors.END}\n")
+            return False
+        
+        self.messages.print_output(f"{Colors.GREEN}✅ Найден файл зависимостей: {requirements_file}{Colors.END}\n")
+        
+        try:
+            # Проверяем и устанавливаем pip если его нет
+            if not self._ensure_pip_available():
+                return False
+            
+            # Устанавливаем зависимости из requirements.txt
+            return_code = self._run_with_progress_output([
+                sys.executable, "-m", "pip", "install", "-r", requirements_file
+            ], "Установка зависимостей из requirements.txt")
+            
+            if return_code != 0:
+                self.messages.print_output(f"{Colors.RED}❌ Ошибка установки зависимостей{Colors.END}\n")
+                return False
+            
+            # Проверяем и устанавливаем системные зависимости
+            self._handle_system_dependencies()
+            
+            self.messages.print_output(f"{Colors.GREEN}🎉 Установка зависимостей завершена!{Colors.END}\n")
+            self.messages.print_output(f"{Colors.CYAN}💡 Проект готов к работе{Colors.END}\n")
+            return True
+            
+        except Exception as e:
+            self.messages.print_output(f"{Colors.RED}❌ Критическая ошибка установки зависимостей: {e}{Colors.END}\n")
+            return False
+
+    def run_database_migration(self):
+        """Запускает миграцию базы данных"""
+        self.messages.print_output(f"{Colors.BLUE}=== МИГРАЦИЯ БАЗЫ ДАННЫХ ==={Colors.END}\n")
+        
+        # Получаем путь к скрипту из конфигурации
+        migration_script_path = self.config['scripts']['migration_script']
+        migration_script = os.path.join(self.project_root, migration_script_path)
+        
+        if not os.path.exists(migration_script):
+            self.messages.print_output(f"{Colors.RED}❌ Скрипт миграции не найден: {migration_script}{Colors.END}\n")
+            self.messages.print_output(f"{Colors.CYAN}💡 Проверьте конфигурацию SCRIPTS_CONFIG в core_updater.py{Colors.END}\n")
+            return False
+        
+        self.messages.print_output(f"{Colors.CYAN}💡 Запускаю миграцию базы данных...{Colors.END}\n")
+        
+        # Запускаем миграцию с прогрессом
+        return_code = self._run_with_progress_output([
+            sys.executable, migration_script, "--migrate"
+        ], "Миграция базы данных")
+        
+        if return_code == 0:
+            self.messages.print_output(f"{Colors.GREEN}🎉 Миграция завершена успешно!{Colors.END}\n")
+            return True
+        else:
+            self.messages.print_output(f"{Colors.RED}❌ Миграция завершилась с ошибками{Colors.END}\n")
             return False
 
 class UpdateManager:
@@ -1286,6 +1590,7 @@ class CoreUpdater:
         self.messages.print_output("1) 🐳 Работа с Docker\n")
         self.messages.print_output("2) 🔄 Обновление данных\n")
         self.messages.print_output("3) 🗄 Миграция базы данных\n")
+        self.messages.print_output("4) 📦 Установка зависимостей\n")
         self.messages.print_output("0) Выход\n")
 
     def _show_docker_submenu(self):
@@ -1380,7 +1685,20 @@ class CoreUpdater:
             self.messages.print_output(f"{Colors.GREEN}🎉 Обновление данных завершено успешно!{Colors.END}\n")
             return True
         elif choice == '3':
-            self.messages.print_output(f"{Colors.YELLOW}⚠️ Заглушка: Миграция базы данных{Colors.END}\n")
+            # Миграция базы данных
+            if not self.utils.run_database_migration():
+                self.messages.print_output(f"{Colors.RED}❌ Миграция базы данных завершилась с ошибками{Colors.END}\n")
+                return True
+            
+            self.messages.print_output(f"{Colors.GREEN}🎉 Миграция базы данных завершена успешно!{Colors.END}\n")
+            return True
+        elif choice == '4':
+            # Установка зависимостей
+            if not self.utils.install_project_dependencies():
+                self.messages.print_output(f"{Colors.RED}❌ Установка зависимостей завершилась с ошибками{Colors.END}\n")
+                return True
+            
+            self.messages.print_output(f"{Colors.GREEN}🎉 Установка зависимостей завершена успешно!{Colors.END}\n")
             return True
         elif choice == '0':
             self.messages.print_output(f"{Colors.BLUE}До свидания!{Colors.END}\n")
@@ -1410,7 +1728,7 @@ class CoreUpdater:
             self._show_menu_options()
             
             # Общая логика обработки выбора
-            choice = self.messages.safe_input(f"{Colors.YELLOW}Введите номер (0-3): {Colors.END}")
+            choice = self.messages.safe_input(f"{Colors.YELLOW}Введите номер (0-4): {Colors.END}")
             if self._handle_menu_choice(choice):
                 # Если выбор был "0" (выход), прерываем цикл
                 if choice == '0':
