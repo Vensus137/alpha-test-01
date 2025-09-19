@@ -39,6 +39,11 @@ class TgCommandRegistry:
                                    BotCommandScopeChatMember,
                                    BotCommandScopeDefault)
         
+        # Проверяем, что бот доступен
+        if not self.bot:
+            self.logger.error("❌ Бот недоступен, регистрация команд пропущена")
+            return
+        
         commands = self._get_commands()
         if not commands:
             self.logger.info("Команды для регистрации не найдены в конфигурации")
@@ -72,6 +77,11 @@ class TgCommandRegistry:
                                    BotCommandScopeChat,
                                    BotCommandScopeChatMember)
         
+        # Проверяем, что бот доступен
+        if not self.bot:
+            self.logger.error("❌ Бот недоступен, очистка команд пропущена")
+            return
+        
         try:
             # Очищаем команды для всех основных scope
             scopes_to_clear = [
@@ -95,6 +105,10 @@ class TgCommandRegistry:
     async def _clear_specific_commands(self):
         """Очищает команды для конкретных чатов и пользователей из настроек плагина"""
         from aiogram.types import BotCommandScopeChat, BotCommandScopeChatMember
+        
+        # Проверяем, что бот доступен
+        if not self.bot:
+            return
         
         try:
             settings = self.settings_manager.get_plugin_settings('tg_command_registry')
