@@ -366,6 +366,8 @@ show_app_logs() {
         exit 1
     fi
     
+    echo -e "${YELLOW}📋 Показываю последние $LINES строк логов...${NC}"
+    
     # Показываем логи приложения из файла
     docker exec $CONTAINER_STATS_NAME tail -f -n $LINES /workspace/logs/bot.log
 }
@@ -534,7 +536,7 @@ main() {
             restart_app
             ;;
         app-logs)
-            show_app_logs
+            show_app_logs "$2"
             ;;
         logs)
             show_logs
