@@ -1,16 +1,16 @@
 FROM python:3.11-slim
 
-# Устанавливаем системные зависимости с fallback на альтернативные репозитории
+# Устанавливаем все системные зависимости за один раз
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     ca-certificates \
-    && (apt-get install -y ffmpeg git libmagic1 libmagic-dev || \
-        (echo "deb http://deb.debian.org/debian bookworm main" > /etc/apt/sources.list.d/bookworm.list && \
-         echo "deb http://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list.d/bookworm.list && \
-         echo "deb http://deb.debian.org/debian bookworm-updates main" >> /etc/apt/sources.list.d/bookworm.list && \
-         apt-get update && \
-         apt-get install -y ffmpeg git libmagic1 libmagic-dev)) \
+    curl \
+    ffmpeg \
+    git \
+    libmagic1 \
+    libmagic-dev \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаем рабочую директорию
