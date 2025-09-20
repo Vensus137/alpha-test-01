@@ -643,10 +643,9 @@ class DockerManager:
             self.messages.print_output(f"{Colors.CYAN}💡 Собираем Docker образ...{Colors.END}\n")
             
             return_code = self.utils._run_with_progress_output(
-                ['docker', 'build', '--no-cache', '--progress=plain', '-t', 'coreness-image', '-f', 'Dockerfile', '..'], 
+                ['docker', 'build', '-t', 'coreness-image', '-f', 'Dockerfile', '..'], 
                 "Сборка Docker образа",
-                cwd=docker_dir,
-                buffer_size=40  # Увеличиваем буфер для более подробных логов
+                cwd=docker_dir
             )
             if return_code != 0:
                 self.messages.print_output(f"{Colors.RED}❌ Ошибка сборки Docker образа{Colors.END}\n")
