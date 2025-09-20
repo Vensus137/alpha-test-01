@@ -34,9 +34,9 @@ MAIN_SCRIPT="main.py"
 # Настройки контейнера
 CONTAINER_NAME="coreness-service"
 
-# Переменные для настроек контейнера
-MEMORY_LIMIT=""
-CPU_LIMIT=""
+# Дефолтные значения для настроек контейнера
+DEFAULT_MEMORY_LIMIT=""
+DEFAULT_CPU_LIMIT=""
 
 # Шаблоны команд для создания алиасов
 # Формат: command-<имя_команды>
@@ -141,10 +141,10 @@ get_config() {
             fi
             ;;
         "memory_limit")
-            computed_value="${MEMORY_LIMIT:-$default_value}"
+            computed_value="${CONFIG_CACHE[memory_limit]:-$DEFAULT_MEMORY_LIMIT}"
             ;;
         "cpu_limit")
-            computed_value="${CPU_LIMIT:-$default_value}"
+            computed_value="${CONFIG_CACHE[cpu_limit]:-$DEFAULT_CPU_LIMIT}"
             ;;
         "command_description")
             computed_value="$COMMAND_DESCRIPTION"
@@ -197,6 +197,60 @@ update_config_cache() {
     local key="$1"
     local value="$2"
     CONFIG_CACHE[$key]="$value"
+    
+    # Если обновляем настройки контейнера - сохраняем в файл
+    if [ "$key" = "memory_limit" ] || [ "$key" = "cpu_limit" ]; then
+        save_config_to_file
+    fi
+}
+
+# Получить путь к файлу конфигурации для текущего проекта
+get_config_file_path() {
+    local container_name=$(get_container_name)
+    echo "$HOME/.${container_name}_config"
+}
+
+# Загрузить конфигурацию из файла
+load_config_from_file() {
+    local config_file=$(get_config_file_path)
+    if [ -f "$config_file" ]; then
+        # Читаем файл и сразу сохраняем в кэш
+        while IFS='=' read -r key value; do
+            # Пропускаем комментарии и пустые строки
+            if [[ "$key" =~ ^[[:space:]]*# ]] || [[ -z "$key" ]]; then
+                continue
+            fi
+            
+            case "$key" in
+                "MEMORY_LIMIT")
+                    CONFIG_CACHE[memory_limit]="$value"
+                    ;;
+                "CPU_LIMIT")
+                    CONFIG_CACHE[cpu_limit]="$value"
+                    ;;
+            esac
+        done < "$config_file"
+        
+        echo "✅ Загружена конфигурация из $config_file"
+    else
+        echo "ℹ️ Файл конфигурации $config_file не найден, используются значения по умолчанию"
+    fi
+}
+
+# Сохранить конфигурацию в файл
+save_config_to_file() {
+    local config_file=$(get_config_file_path)
+    local container_name=$(get_container_name)
+    
+    # Создаем файл конфигурации напрямую из кэша
+    cat > "$config_file" << EOF
+# Конфигурация для проекта $container_name
+# Создано: $(date)
+MEMORY_LIMIT="${CONFIG_CACHE[memory_limit]:-$DEFAULT_MEMORY_LIMIT}"
+CPU_LIMIT="${CONFIG_CACHE[cpu_limit]:-$DEFAULT_CPU_LIMIT}"
+EOF
+    
+    echo "✅ Конфигурация сохранена в $config_file"
 }
 
 # Удобные функции-обертки для часто используемых значений
@@ -710,7 +764,6 @@ set_container_config() {
                     exit 1
                 fi
                 
-                export MEMORY_LIMIT="$value"
                 update_config_cache "memory_limit" "$value"  # Обновляем только нужное значение в кэше
                 echo -e "${GREEN}✅ Лимит памяти установлен: $value${NC}"
                 ;;
@@ -732,16 +785,13 @@ set_container_config() {
                     exit 1
                 fi
                 
-                export CPU_LIMIT="$value"
                 update_config_cache "cpu_limit" "$value"  # Обновляем только нужное значение в кэше
                 echo -e "${GREEN}✅ Лимит CPU установлен: $value${NC}"
                 ;;
                 
             "reset")
-                unset MEMORY_LIMIT
-                unset CPU_LIMIT
-                update_config_cache "memory_limit" ""  # Сбрасываем только нужные значения в кэше
-                update_config_cache "cpu_limit" ""
+                update_config_cache "memory_limit" "$DEFAULT_MEMORY_LIMIT"  # Сбрасываем к дефолтным значениям
+                update_config_cache "cpu_limit" "$DEFAULT_CPU_LIMIT"
                 echo -e "${GREEN}✅ Все лимиты сброшены к значениям по умолчанию${NC}"
                 ;;
                 
@@ -842,6 +892,9 @@ main() {
         install_commands "$2"  # Передаем второй параметр как имя контейнера
         exit 0
     fi
+    
+    # Загружаем конфигурацию из файла (если есть)
+    load_config_from_file
     
     # Для остальных команд проверяем Docker
     check_docker
