@@ -6,6 +6,14 @@ RUN apt-get update && apt-get install -y \
     git \
     libmagic1 \
     libmagic-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаем Node.js и PM2
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g pm2 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаем рабочую директорию

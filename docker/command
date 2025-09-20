@@ -866,6 +866,25 @@ set_container_config() {
     echo -e "${YELLOW}🔄 Для применения выполните: $container_name restart${NC}"
 }
 
+# Функция для работы с PM2
+manage_pm2() {
+    local container_name=$(get_container_name)
+    echo -e "${YELLOW}🔄 Управление PM2 процессами...${NC}"
+    
+    # Проверяем, что контейнер запущен
+    if ! docker ps --filter "name=$container_name" --filter "status=running" | grep -q "$container_name"; then
+        echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
+        run_container_with_config "Запуск"
+    fi
+    
+    # Передаем все аргументы PM2 как есть
+    shift  # Убираем первый аргумент (pm2)
+    echo -e "${BLUE}📋 Выполняю: pm2 $*${NC}"
+    
+    # Выполняем команду PM2 в контейнере и отображаем вывод
+    docker exec $container_name pm2 "$@"
+}
+
 # Универсальная функция для экстренной остановки
 emergency_stop() {
     echo -e "${RED}💀 KILL ALL DOCKER${NC}"
@@ -907,6 +926,7 @@ show_available_commands() {
     echo "  ${prefix}app-update      ${prefix:+# }Обновить приложение"
     echo "  ${prefix}app-db          ${prefix:+# }Работа с базой данных"
     echo "  ${prefix}app-logs [N]    ${prefix:+# }Показать логи приложения (файл, N строк)"
+    echo "  ${prefix}pm2 [args]      ${prefix:+# }Управление PM2 процессами"
     echo "  ${prefix}logs            ${prefix:+# }Показать логи контейнера"
     echo "  ${prefix}status          ${prefix:+# }Показать статус контейнера"
     echo "  ${prefix}shell           ${prefix:+# }Запустить shell в контейнере"
@@ -936,6 +956,8 @@ show_help() {
     echo "  $container_name app-start                         # Запустить приложение"
     echo "  $container_name app-logs 50                       # Логи приложения (50 строк)"
     echo "  $container_name app-db --all --migrate            # Миграция БД"
+    echo "  $container_name pm2 start main.py                # Запустить через PM2"
+    echo "  $container_name pm2 list                         # Список PM2 процессов"
     echo "  $container_name config cpu 1.0                    # Установить лимит CPU (100%)"
     echo "  $container_name config memory 512m cpu 0.5        # Установить оба лимита (512MB, 50%)"
     echo "  $container_name config reset                      # Сбросить лимиты"
@@ -992,6 +1014,9 @@ main() {
             ;;
         app-db)
             manage_app_database "$@"
+            ;;
+        pm2)
+            manage_pm2 "$@"
             ;;
         shell)
             open_shell
