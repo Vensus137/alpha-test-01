@@ -43,6 +43,52 @@ DEFAULT_CPU_LIMIT=""
 ALIASES=("command-start" "command-stop" "command-restart" "command-logs" "command-status" "command-update" "command-db" "command-shell" "command-kill" "command-config")
 
 # =============================================================================
+# УТИЛИТЫ - Вспомогательные функции
+# =============================================================================
+
+# Универсальная функция для нормализации окончаний строк
+normalize_line_endings() {
+    local file="$1"
+    
+    if [ ! -f "$file" ]; then
+        return 1
+    fi
+    
+    # Определяем целевую ОС
+    local target_os=""
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        target_os="linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        target_os="macos"
+    elif [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
+        target_os="windows"
+    else
+        # Неизвестная ОС - не конвертируем
+        return 0
+    fi
+    
+    # Конвертируем в зависимости от целевой ОС
+    case "$target_os" in
+        "linux"|"macos")
+            # На Linux/Mac: конвертируем в LF
+            if command -v dos2unix &> /dev/null; then
+                dos2unix "$file" 2>/dev/null || true
+            elif command -v sed &> /dev/null; then
+                sed -i 's/\r$//' "$file" 2>/dev/null || true
+            fi
+            ;;
+        "windows")
+            # На Windows: конвертируем в CRLF
+            if command -v unix2dos &> /dev/null; then
+                unix2dos "$file" 2>/dev/null || true
+            elif command -v sed &> /dev/null; then
+                sed -i 's/$/\r/' "$file" 2>/dev/null || true
+            fi
+            ;;
+    esac
+}
+
+# =============================================================================
 # CONFIG MANAGER - Централизованное управление конфигурацией с кэшем
 # =============================================================================
 
@@ -232,8 +278,6 @@ load_config_from_file() {
         done < "$config_file"
         
         echo "✅ Загружена конфигурация из $config_file"
-    else
-        echo "ℹ️ Файл конфигурации $config_file не найден, используются значения по умолчанию"
     fi
 }
 
@@ -387,8 +431,11 @@ install_commands() {
     
     # Копируем основной скрипт
     if cp "$SCRIPT_PATH" "$INSTALL_DIR/$container_name"; then
-        chmod +x "$INSTALL_DIR/$container_name"
+        # Универсальная конвертация окончаний строк
+        normalize_line_endings "$INSTALL_DIR/$container_name"
         
+        chmod +x "$INSTALL_DIR/$container_name"
+
         echo -e "${GREEN}✅ Команда '$container_name' установлена${NC}"
     else
         echo -e "${RED}❌ Ошибка установки команды '$container_name'${NC}"
@@ -456,13 +503,13 @@ run_container_with_config() {
         exit 1
     fi
     
-    # Показываем текущие настройки если есть
-    if [ -n "$memory_limit" ] || [ -n "$cpu_limit" ]; then
+    # Показываем текущие настройки если есть (проверяем что не пустые)
+    if ([ -n "$memory_limit" ] && [ "$memory_limit" != '""' ]) || ([ -n "$cpu_limit" ] && [ "$cpu_limit" != '""' ]); then
         echo -e "${BLUE}🔧 Применяемые настройки:${NC}"
-        if [ -n "$memory_limit" ]; then
+        if [ -n "$memory_limit" ] && [ "$memory_limit" != '""' ]; then
             echo -e "   Лимит памяти: $memory_limit"
         fi
-        if [ -n "$cpu_limit" ]; then
+        if [ -n "$cpu_limit" ] && [ "$cpu_limit" != '""' ]; then
             echo -e "   Лимит CPU: $cpu_limit"
         fi
     fi
@@ -477,11 +524,11 @@ run_container_with_config() {
     # Собираем команду запуска
     local cmd=("docker" "run" "-d" "--name" "$container_name")
     
-    # Добавляем лимиты если указаны
-    if [ -n "$memory_limit" ]; then
+    # Добавляем лимиты если указаны (проверяем что не пустые)
+    if [ -n "$memory_limit" ] && [ "$memory_limit" != '""' ]; then
         cmd+=("-m" "$memory_limit")
     fi
-    if [ -n "$cpu_limit" ]; then
+    if [ -n "$cpu_limit" ] && [ "$cpu_limit" != '""' ]; then
         cmd+=("--cpus" "$cpu_limit")
     fi
     
