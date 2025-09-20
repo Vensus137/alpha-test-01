@@ -310,7 +310,7 @@ run_container_with_config() {
 
 # Функция для запуска контейнера
 start_service() {
-    run_container_with_config "Запуск"
+    ensure_container_running
 }
 
 # Универсальная функция для остановки контейнера
@@ -335,10 +335,7 @@ start_app() {
     echo -e "${YELLOW}📱 Запуск приложения в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
-        echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
-        run_container_with_config "Запуск"
-    fi
+    ensure_container_running
     
     # Проверяем, работает ли приложение уже
     if docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null; then
@@ -507,10 +504,7 @@ open_shell() {
     echo -e "${YELLOW}🐚 Запуск shell в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
-        echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
-        run_container_with_config "Запуск"
-    fi
+    ensure_container_running
     
     # Запускаем bash в контейнере
     docker exec -it $COMMAND_NAME bash
