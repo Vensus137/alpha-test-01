@@ -242,7 +242,7 @@ class MessageHandler:
 
     def print_header(self):
         """Выводит заголовок приложения"""
-        self.print_output(f"{Colors.BLUE}{Colors.BOLD}================================{Colors.END}\n")
+        self.print_output(f"\n{Colors.BLUE}{Colors.BOLD}================================{Colors.END}\n")
         self.print_output(f"{Colors.BLUE}{Colors.BOLD}      CORENESS UPDATER NEW      {Colors.END}\n")
         self.print_output(f"{Colors.BLUE}{Colors.BOLD}================================{Colors.END}\n")
 
@@ -250,7 +250,7 @@ class MessageHandler:
         """Безопасный ввод с обработкой кодировки"""
         try:
             # self.print_output(f"{Colors.CYAN}[DEBUG] Запрашиваем ввод: '{prompt}'{Colors.END}\n")
-            self.print_output(prompt)
+            self.print_output(f"\n{prompt}")
             result = input()
             # Очищаем результат от лишних символов
             cleaned_result = result.strip()
@@ -258,7 +258,7 @@ class MessageHandler:
             return cleaned_result
         except UnicodeDecodeError:
             # Если кодировка не работает, пробуем альтернативный способ
-            self.print_output("Введите ответ (используйте английские буквы):\n")
+            self.print_output("\nВведите ответ (используйте английские буквы):\n")
             try:
                 result = input("> ")
                 cleaned_result = result.strip()
@@ -633,15 +633,11 @@ class DockerManager:
                 self.messages.print_output(f"{Colors.CYAN}💡 Останавливаю и удаляю существующий контейнер...{Colors.END}\n")
                 
                 # Останавливаем и удаляем существующий контейнер
-                self.utils._run_with_progress_output(
-                    ['docker', 'stop', container_name], 
-                    f"Остановка контейнера '{container_name}'"
-                )
-                self.utils._run_with_progress_output(
-                    ['docker', 'rm', container_name], 
-                    f"Удаление контейнера '{container_name}'"
-                )
-                self.messages.print_output(f"{Colors.GREEN}✅ Старый контейнер удален{Colors.END}\n")
+                if self.stop_and_remove_container(container_name):
+                    self.messages.print_output(f"{Colors.GREEN}✅ Старый контейнер удален{Colors.END}\n")
+                else:
+                    self.messages.print_output(f"{Colors.RED}❌ Не удалось удалить старый контейнер{Colors.END}\n")
+                    return False
             
             # Собираем образ (один образ для всех контейнеров)
             self.messages.print_output(f"{Colors.CYAN}💡 Собираем Docker образ...{Colors.END}\n")
@@ -798,6 +794,80 @@ class DockerManager:
             return True
             
         except subprocess.CalledProcessError as e:
+            self.messages.print_output(f"{Colors.RED}❌ Ошибка при удалении контейнера: {e}{Colors.END}\n")
+            return False
+
+    def list_containers(self):
+        """Показывает список всех контейнеров"""
+        try:
+            # Получаем список всех контейнеров (запущенных и остановленных)
+            result = subprocess.run(
+                ['docker', 'ps', '-a', '--format', 'table {{.Names}}\t{{.Status}}\t{{.Image}}'],
+                capture_output=True, text=True
+            )
+            
+            if result.stdout.strip():
+                self.messages.print_output(f"{Colors.CYAN}📋 Доступные контейнеры:{Colors.END}\n")
+                self.messages.print_output(f"{Colors.CYAN}{result.stdout}{Colors.END}\n")
+                return True
+            else:
+                self.messages.print_output(f"{Colors.YELLOW}⚠️ Контейнеры не найдены{Colors.END}\n")
+                return False
+        except Exception as e:
+            self.messages.print_output(f"{Colors.RED}❌ Ошибка получения списка контейнеров: {e}{Colors.END}\n")
+            return False
+
+    def stop_and_remove_container(self, container_name):
+        """Универсальный метод для остановки и удаления контейнера"""
+        try:
+            # Останавливаем контейнер (если запущен)
+            self.messages.print_output(f"{Colors.CYAN}💡 Останавливаю контейнер '{container_name}'...{Colors.END}\n")
+            self.utils._run_with_progress_output(
+                ['docker', 'stop', container_name], 
+                f"Остановка контейнера '{container_name}'"
+            )
+            
+            # Удаляем контейнер
+            self.messages.print_output(f"{Colors.CYAN}💡 Удаляю контейнер '{container_name}'...{Colors.END}\n")
+            return_code = self.utils._run_with_progress_output(
+                ['docker', 'rm', container_name], 
+                f"Удаление контейнера '{container_name}'"
+            )
+            
+            if return_code == 0:
+                self.messages.print_output(f"{Colors.GREEN}✅ Контейнер '{container_name}' успешно удален{Colors.END}\n")
+                return True
+            else:
+                self.messages.print_output(f"{Colors.RED}❌ Не удалось удалить контейнер '{container_name}'{Colors.END}\n")
+                return False
+                
+        except Exception as e:
+            self.messages.print_output(f"{Colors.RED}❌ Ошибка при удалении контейнера: {e}{Colors.END}\n")
+            return False
+
+    def remove_specific_container(self, container_name):
+        """Удаляет конкретный контейнер с проверкой существования"""
+        # Проверяем, существует ли контейнер (точное совпадение)
+        try:
+            check_result = subprocess.run(
+                ['docker', 'ps', '-a', '--filter', f'name=^{container_name}$', '--format', '{{.Names}}'],
+                capture_output=True, text=True
+            )
+            
+            if not check_result.stdout.strip():
+                self.messages.print_output(f"{Colors.RED}❌ Контейнер '{container_name}' не найден{Colors.END}\n")
+                return False
+            
+            # Подтверждение удаления
+            confirm = self.messages.safe_input(f"{Colors.YELLOW}⚠️ Удалить контейнер '{container_name}'? (y/N): {Colors.END}")
+            if confirm.lower() != 'y':
+                self.messages.print_output(f"{Colors.CYAN}💡 Удаление отменено{Colors.END}\n")
+                return False
+            
+            # Останавливаем и удаляем контейнер
+            return self.stop_and_remove_container(container_name)
+                
+        except Exception as e:
             self.messages.print_output(f"{Colors.RED}❌ Ошибка при удалении контейнера: {e}{Colors.END}\n")
             return False
 
@@ -1728,7 +1798,7 @@ class CoreUpdater:
         script_path = self.utils.get_script_path()
         project_root = self.utils.get_project_root()
         
-        self.messages.print_output(f"{Colors.CYAN}📁 Скрипт находится в: {script_path.parent}{Colors.END}\n")
+        self.messages.print_output(f"\n{Colors.CYAN}📁 Скрипт находится в: {script_path.parent}{Colors.END}\n")
         
         # Безопасно получаем рабочую директорию
         try:
@@ -1778,18 +1848,18 @@ class CoreUpdater:
 
     def _show_docker_submenu(self):
         """Показывает подменю для работы с Docker"""
-        self.messages.print_output(f"{Colors.BLUE}=== РАБОТА С DOCKER ==={Colors.END}\n")
+        self.messages.print_output(f"\n{Colors.BLUE}=== РАБОТА С DOCKER ==={Colors.END}\n")
         
         # Показываем список контейнеров
-        self._list_containers()
+        self.docker.list_containers()
         
-        self.messages.print_output("1) 📦 Установка/обновление Docker и контейнера\n")
+        self.messages.print_output("\n1) 📦 Установка/обновление Docker и контейнера\n")
         self.messages.print_output("2) 🗑 Удаление контейнера\n")
         self.messages.print_output("0) Назад в главное меню\n")
     
     def _show_remove_submenu(self):
         """Показывает подменю для удаления контейнеров"""
-        self.messages.print_output(f"{Colors.BLUE}=== УДАЛЕНИЕ КОНТЕЙНЕРА ==={Colors.END}\n")
+        self.messages.print_output(f"\n{Colors.BLUE}=== УДАЛЕНИЕ КОНТЕЙНЕРА ==={Colors.END}\n")
         self.messages.print_output("1) 🎯 Удалить конкретный контейнер\n")
         self.messages.print_output("2) 🗑 Удалить все контейнеры и образы\n")
         self.messages.print_output("0) Назад в Docker меню\n")
@@ -1799,9 +1869,15 @@ class CoreUpdater:
         self.messages.print_output(f"{Colors.YELLOW}📝 Введите имя контейнера:{Colors.END}\n")
         self.messages.print_output(f"{Colors.CYAN}💡 Имя будет использоваться для команд (например: {DEFAULT_CONTAINER_NAME} start, myproject stop){Colors.END}\n")
         self.messages.print_output(f"{Colors.CYAN}💡 Оставьте пустым для использования имени по умолчанию '{DEFAULT_CONTAINER_NAME}'{Colors.END}\n")
+        self.messages.print_output(f"{Colors.CYAN}💡 Введите '0' для выхода в главное меню{Colors.END}\n")
         
         while True:
-            container_name = self.messages.safe_input(f"{Colors.YELLOW}Имя контейнера (по умолчанию: {DEFAULT_CONTAINER_NAME}): {Colors.END}").strip()
+            container_name = self.messages.safe_input(f"{Colors.YELLOW}Имя контейнера (по умолчанию: {DEFAULT_CONTAINER_NAME}, 0=выход): {Colors.END}").strip()
+            
+            # Проверяем на выход
+            if container_name == '0':
+                self.messages.print_output(f"\n{Colors.CYAN}💡 Возврат в главное меню{Colors.END}\n")
+                return None
             
             # Если пустое - используем значение по умолчанию
             if not container_name:
@@ -1835,30 +1911,10 @@ class CoreUpdater:
         
         return container_name
 
-    def _list_containers(self):
-        """Показывает список всех контейнеров"""
-        try:
-            # Получаем список всех контейнеров (запущенных и остановленных)
-            result = subprocess.run(
-                ['docker', 'ps', '-a', '--format', 'table {{.Names}}\t{{.Status}}\t{{.Image}}'],
-                capture_output=True, text=True
-            )
-            
-            if result.stdout.strip():
-                self.messages.print_output(f"{Colors.CYAN}📋 Доступные контейнеры:{Colors.END}\n")
-                self.messages.print_output(f"{Colors.CYAN}{result.stdout}{Colors.END}\n")
-                return True
-            else:
-                self.messages.print_output(f"{Colors.YELLOW}⚠️ Контейнеры не найдены{Colors.END}\n")
-                return False
-        except Exception as e:
-            self.messages.print_output(f"{Colors.RED}❌ Ошибка получения списка контейнеров: {e}{Colors.END}\n")
-            return False
-
     def _remove_specific_container(self):
         """Удаляет конкретный контейнер"""
         # Показываем список контейнеров
-        if not self._list_containers():
+        if not self.docker.list_containers():
             self.messages.print_output(f"{Colors.CYAN}💡 Нет контейнеров для удаления{Colors.END}\n")
             return True  # Возвращаем True, чтобы вернуться в меню
         
@@ -1869,46 +1925,10 @@ class CoreUpdater:
             self.messages.print_output(f"{Colors.RED}❌ Имя контейнера не может быть пустым{Colors.END}\n")
             return True  # Возвращаем True, чтобы вернуться в меню
         
-        # Проверяем, существует ли контейнер
-        try:
-            check_result = subprocess.run(
-                ['docker', 'ps', '-a', '--filter', f'name={container_name}', '--format', '{{.Names}}'],
-                capture_output=True, text=True
-            )
-            
-            if not check_result.stdout.strip():
-                self.messages.print_output(f"{Colors.RED}❌ Контейнер '{container_name}' не найден{Colors.END}\n")
-                return True  # Возвращаем True, чтобы вернуться в меню
-            
-            # Подтверждение удаления
-            confirm = self.messages.safe_input(f"{Colors.YELLOW}⚠️ Удалить контейнер '{container_name}'? (y/N): {Colors.END}")
-            if confirm.lower() != 'y':
-                self.messages.print_output(f"{Colors.CYAN}💡 Удаление отменено{Colors.END}\n")
-                return True
-            
-            # Останавливаем контейнер (если запущен)
-            self.messages.print_output(f"{Colors.CYAN}💡 Останавливаю контейнер '{container_name}'...{Colors.END}\n")
-            self.utils._run_with_progress_output(
-                ['docker', 'stop', container_name], 
-                f"Остановка контейнера '{container_name}'"
-            )
-            
-            # Удаляем контейнер
-            self.messages.print_output(f"{Colors.CYAN}💡 Удаляю контейнер '{container_name}'...{Colors.END}\n")
-            return_code = self.utils._run_with_progress_output(
-                ['docker', 'rm', container_name], 
-                f"Удаление контейнера '{container_name}'"
-            )
-            
-            if return_code == 0:
-                self.messages.print_output(f"{Colors.GREEN}✅ Контейнер '{container_name}' успешно удален{Colors.END}\n")
-                return True
-            else:
-                self.messages.print_output(f"{Colors.RED}❌ Не удалось удалить контейнер '{container_name}'{Colors.END}\n")
-                return True  # Возвращаем True, чтобы вернуться в меню
-                
-        except Exception as e:
-            self.messages.print_output(f"{Colors.RED}❌ Ошибка при удалении контейнера: {e}{Colors.END}\n")
+        # Удаляем контейнер через DockerManager
+        if self.docker.remove_specific_container(container_name):
+            return True
+        else:
             return True  # Возвращаем True, чтобы вернуться в меню
 
     def _handle_remove_choice(self, choice):
@@ -1935,17 +1955,22 @@ class CoreUpdater:
         elif choice == '0':
             return True  # Возвращаемся в Docker меню
         else:
-            self.messages.print_output(f"{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
             return False
 
     def _handle_docker_choice(self, choice):
         """Обрабатывает выбор в подменю Docker"""
         if choice == '1':
             # Установка/обновление Docker и контейнера
-            self.messages.print_output(f"{Colors.BLUE}=== УСТАНОВКА/ОБНОВЛЕНИЕ DOCKER ==={Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.BLUE}=== УСТАНОВКА/ОБНОВЛЕНИЕ DOCKER ==={Colors.END}\n")
             
             # Запрашиваем имя контейнера
             container_name = self._get_container_name()
+            
+            # Проверяем, не выбрал ли пользователь выход
+            if container_name is None:
+                self.messages.print_output(f"\n{Colors.CYAN}💡 Установка отменена{Colors.END}\n")
+                return True  # Возвращаемся в Docker меню
             
             # 1. Проверяем зависимости
             if not self.docker.check_dependencies():
@@ -1972,7 +1997,7 @@ class CoreUpdater:
                 self.messages.print_output(f"{Colors.RED}❌ Не удалось установить глобальные команды{Colors.END}\n")
                 return True
             
-            self.messages.print_output(f"{Colors.GREEN}🎉 Docker, контейнер '{container_name}' и глобальные команды успешно установлены!{Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.GREEN}🎉 Docker, контейнер '{container_name}' и глобальные команды успешно установлены!{Colors.END}\n")
             return True
             
         elif choice == '2':
@@ -1990,7 +2015,7 @@ class CoreUpdater:
         elif choice == '0':
             return True  # Возвращаемся в главное меню
         else:
-            self.messages.print_output(f"{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
             return False
 
     def _handle_menu_choice(self, choice):
@@ -2039,7 +2064,7 @@ class CoreUpdater:
             self.messages.print_output(f"{Colors.BLUE}До свидания!{Colors.END}\n")
             return True  # Возвращаем True для выхода из главного цикла
         else:
-            self.messages.print_output(f"{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.RED}Неверный выбор. Попробуйте снова.{Colors.END}\n")
             return False
 
     def main_menu(self):
@@ -2057,7 +2082,7 @@ class CoreUpdater:
                 self.messages.print_output(f"{Colors.YELLOW}   Убедитесь, что это правильная папка для проекта Coreness.{Colors.END}\n")
                 self.messages.print_output(f"{Colors.CYAN}💡 Если это не так, переместите скрипт в папку tools/core{Colors.END}\n")
             
-            self.messages.print_output(f"{Colors.YELLOW}Выберите действие:{Colors.END}\n")
+            self.messages.print_output(f"\n{Colors.YELLOW}Выберите действие:{Colors.END}\n")
             
             # Показываем информационное сообщение
             self._show_menu_info()
