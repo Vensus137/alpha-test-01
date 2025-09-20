@@ -30,19 +30,13 @@ class Application:
     def _signal_handler(self, signum, _):
         """Обработчик сигналов для graceful shutdown"""
         self.logger.info(f"Получен сигнал {signum}, начинаем graceful shutdown...")
-        self.logger.info(f"is_running: {self.is_running}, event_loop_running: {asyncio.get_event_loop().is_running()}")
         
-        # Устанавливаем событие shutdown в event loop
-        if asyncio.get_event_loop().is_running():
-            self.logger.info("Event loop работает, создаем задачу async shutdown")
-            asyncio.create_task(self._async_shutdown())
+        # Просто устанавливаем событие shutdown
+        if self.is_running:
+            self.logger.info("Устанавливаем shutdown event")
+            self._shutdown_event.set()
         else:
-            # Только если приложение уже запущено
-            if self.is_running:
-                self.logger.info("Event loop не работает, устанавливаем shutdown event")
-                self._shutdown_event.set()
-            else:
-                self.logger.info("Приложение еще не запущено, игнорируем сигнал")
+            self.logger.info("Приложение еще не запущено, игнорируем сигнал")
     
     async def startup(self):
         """Асинхронный запуск приложения"""
@@ -202,7 +196,7 @@ class Application:
         try:
             asyncio.run(self.run())
         except KeyboardInterrupt:
-            self.logger.info("Получен KeyboardInterrupt в run_sync")
+            self.logger.info("Получен KeyboardInterrupt, завершаем приложение")
         except Exception as e:
             self.logger.error(f"Ошибка в run_sync: {e}")
             sys.exit(1) 
