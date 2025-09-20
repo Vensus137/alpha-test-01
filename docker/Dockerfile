@@ -1,16 +1,11 @@
 FROM python:3.11-slim
 
-# Устанавливаем все системные зависимости за один раз
+# Устанавливаем системные зависимости + libmagic для python-magic
 RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    curl \
     ffmpeg \
     git \
     libmagic1 \
     libmagic-dev \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаем рабочую директорию
