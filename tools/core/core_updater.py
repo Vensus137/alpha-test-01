@@ -9,6 +9,16 @@ import subprocess
 import time
 from pathlib import Path
 
+# Загружаем переменные окружения из .env файла
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Загружены переменные окружения из .env")
+except ImportError:
+    print("⚠️ python-dotenv не установлен, переменные окружения не загружены")
+except Exception as e:
+    print(f"⚠️ Ошибка загрузки .env: {e}")
+
 # ОТКЛЮЧАЕМ БУФЕРИЗАЦИЮ ДЛЯ РЕАЛЬНОГО ВРЕМЕНИ
 if hasattr(sys.stdout, 'reconfigure'):
     # Python 3.7+
@@ -338,6 +348,8 @@ class DockerManager:
             docker_target = os.path.join(self.project_root, 'docker')
             if os.path.exists(docker_target):
                 shutil.rmtree(docker_target)
+            # Убеждаемся что корень проекта существует
+            self.utils.ensure_parent_dir(docker_target)
             shutil.copytree(f'{temp_dir}/docker', docker_target)
             
             self.messages.print_output(f"{Colors.CYAN}📁 Конфигурация скопирована в: {docker_target}{Colors.END}\n")
@@ -649,7 +661,7 @@ class DockerManager:
             # Создаем контейнер с нужным именем напрямую
             return_code = self.utils._run_with_progress_output([
                 'docker', 'run', '-d', '--name', container_name,
-                '--env-file', '.env', '-v', '.:/workspace',
+                '-v', f'{self.project_root}:/workspace',
                 'coreness-image', 'tail', '-f', '/dev/null'  # Используем общий образ
             ], f"Создание контейнера '{container_name}'", cwd=docker_dir)
             
@@ -836,6 +848,13 @@ class UtilityManager:
     def get_config(self):
         """Возвращает конфигурацию"""
         return self.config
+    
+    def ensure_parent_dir(self, path):
+        """Создает родительскую папку для указанного пути"""
+        parent_dir = os.path.dirname(path)
+        if parent_dir and not os.path.exists(parent_dir):
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Создаю родительскую папку: {parent_dir}{Colors.END}\n")
+            os.makedirs(parent_dir, exist_ok=True)
     
     def is_in_project_root(self):
         """Проверяет, находится ли скрипт в корне проекта"""
@@ -1374,10 +1393,7 @@ class UpdateManager:
         try:
             if os.path.isdir(src):
                 # Создаем родительские папки если их нет
-                parent_dir = os.path.dirname(dst)
-                if parent_dir and not os.path.exists(parent_dir):
-                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Создаю родительскую папку: {parent_dir}{Colors.END}\n")
-                    os.makedirs(parent_dir, exist_ok=True)
+                self.utils.ensure_parent_dir(dst)
                 
                 # Копируем папку
                 if os.path.exists(dst):
@@ -1389,10 +1405,7 @@ class UpdateManager:
                 self.messages.print_output(f"{Colors.GREEN}✅ Скопирована папка: {dst}{Colors.END}\n")
             else:
                 # Для файлов тоже создаем родительские папки
-                parent_dir = os.path.dirname(dst)
-                if parent_dir and not os.path.exists(parent_dir):
-                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Создаю родительскую папку: {parent_dir}{Colors.END}\n")
-                    os.makedirs(parent_dir, exist_ok=True)
+                self.utils.ensure_parent_dir(dst)
                 
                 # Копируем файл
                 shutil.copy2(src, dst)
@@ -1451,6 +1464,8 @@ class UpdateManager:
                 if os.path.isdir(src_path):
                     shutil.copytree(src_path, backup_path, dirs_exist_ok=True)
                 else:
+                    # Для файлов создаем родительские папки
+                    self.utils.ensure_parent_dir(backup_path)
                     shutil.copy2(src_path, backup_path)
             except Exception as e:
                 self.messages.print_output(f"{Colors.RED}⚠️ Ошибка копирования {backup_item}: {e}{Colors.END}\n")
@@ -1498,6 +1513,8 @@ class UpdateManager:
                 if os.path.isdir(backup_path):
                     shutil.copytree(backup_path, target_path, dirs_exist_ok=True)
                 else:
+                    # Для файлов создаем родительские папки
+                    self.utils.ensure_parent_dir(target_path)
                     shutil.copy2(backup_path, target_path)
                 self.messages.print_output(f"{Colors.GREEN}✅ Восстановлен: {item}{Colors.END}\n")
                     
@@ -1762,6 +1779,10 @@ class CoreUpdater:
     def _show_docker_submenu(self):
         """Показывает подменю для работы с Docker"""
         self.messages.print_output(f"{Colors.BLUE}=== РАБОТА С DOCKER ==={Colors.END}\n")
+        
+        # Показываем список контейнеров
+        self._list_containers()
+        
         self.messages.print_output("1) 📦 Установка/обновление Docker и контейнера\n")
         self.messages.print_output("2) 🗑 Удаление контейнера\n")
         self.messages.print_output("0) Назад в главное меню\n")
@@ -1776,7 +1797,7 @@ class CoreUpdater:
     def _get_container_name(self):
         """Запрашивает имя контейнера у пользователя"""
         self.messages.print_output(f"{Colors.YELLOW}📝 Введите имя контейнера:{Colors.END}\n")
-        self.messages.print_output(f"{Colors.CYAN}💡 Имя будет использоваться для команд (например: {DEFAULT_CONTAINER_NAME} start, project_name stop){Colors.END}\n")
+        self.messages.print_output(f"{Colors.CYAN}💡 Имя будет использоваться для команд (например: {DEFAULT_CONTAINER_NAME} start, myproject stop){Colors.END}\n")
         self.messages.print_output(f"{Colors.CYAN}💡 Оставьте пустым для использования имени по умолчанию '{DEFAULT_CONTAINER_NAME}'{Colors.END}\n")
         
         while True:
