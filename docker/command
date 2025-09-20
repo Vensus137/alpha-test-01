@@ -43,6 +43,65 @@ DEFAULT_CPU_LIMIT=""
 ALIASES=("command-start" "command-stop" "command-restart" "command-logs" "command-status" "command-update" "command-db" "command-shell" "command-kill" "command-config")
 
 # =============================================================================
+# УТИЛИТЫ - Вспомогательные функции
+# =============================================================================
+
+# Универсальная функция для нормализации окончаний строк
+normalize_line_endings() {
+    local file="$1"
+    
+    echo "🔧 DEBUG: normalize_line_endings вызвана для файла: $file"
+    
+    if [ ! -f "$file" ]; then
+        echo "❌ DEBUG: Файл не найден: $file"
+        return 1
+    fi
+    
+    echo "✅ DEBUG: Файл найден: $file"
+    
+    # Определяем целевую ОС
+    local target_os=""
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        target_os="linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        target_os="macos"
+    elif [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
+        target_os="windows"
+    else
+        echo "❌ DEBUG: Неизвестная ОС: $OSTYPE"
+        return 0
+    fi
+    
+    echo "🔧 DEBUG: Определена ОС: $target_os"
+    
+    # Конвертируем в зависимости от целевой ОС
+    case "$target_os" in
+        "linux"|"macos")
+            echo "🔧 DEBUG: Конвертируем в LF для Linux/Mac"
+            if command -v dos2unix &> /dev/null; then
+                echo "🔧 DEBUG: Используем dos2unix"
+                dos2unix "$file" 2>/dev/null || true
+            elif command -v sed &> /dev/null; then
+                echo "🔧 DEBUG: Используем sed"
+                sed -i 's/\r$//' "$file" 2>/dev/null || true
+            fi
+            ;;
+        "windows")
+            echo "🔧 DEBUG: Конвертируем в CRLF для Windows"
+            if command -v unix2dos &> /dev/null; then
+                echo "🔧 DEBUG: Используем unix2dos"
+                unix2dos "$file" 2>/dev/null || true
+            elif command -v sed &> /dev/null; then
+                echo "🔧 DEBUG: Используем sed"
+                sed -i 's/$/\r/' "$file" 2>/dev/null || true
+            fi
+            ;;
+    esac
+    
+    echo "✅ DEBUG: normalize_line_endings завершена"
+}
+
+# =============================================================================
 # CONFIG MANAGER - Централизованное управление конфигурацией с кэшем
 # =============================================================================
 
@@ -232,8 +291,6 @@ load_config_from_file() {
         done < "$config_file"
         
         echo "✅ Загружена конфигурация из $config_file"
-    else
-        echo "ℹ️ Файл конфигурации $config_file не найден, используются значения по умолчанию"
     fi
 }
 
@@ -246,8 +303,8 @@ save_config_to_file() {
     cat > "$config_file" << EOF
 # Конфигурация для проекта $container_name
 # Создано: $(date)
-MEMORY_LIMIT="${CONFIG_CACHE[memory_limit]:-$DEFAULT_MEMORY_LIMIT}"
-CPU_LIMIT="${CONFIG_CACHE[cpu_limit]:-$DEFAULT_CPU_LIMIT}"
+MEMORY_LIMIT=${CONFIG_CACHE[memory_limit]:-$DEFAULT_MEMORY_LIMIT}
+CPU_LIMIT=${CONFIG_CACHE[cpu_limit]:-$DEFAULT_CPU_LIMIT}
 EOF
     
     echo "✅ Конфигурация сохранена в $config_file"
@@ -387,8 +444,16 @@ install_commands() {
     
     # Копируем основной скрипт
     if cp "$SCRIPT_PATH" "$INSTALL_DIR/$container_name"; then
-        chmod +x "$INSTALL_DIR/$container_name"
+        echo "🔧 DEBUG: Файл скопирован в $INSTALL_DIR/$container_name"
         
+        # Универсальная конвертация окончаний строк
+        echo "🔧 DEBUG: Вызываем normalize_line_endings"
+        normalize_line_endings "$INSTALL_DIR/$container_name"
+        echo "🔧 DEBUG: normalize_line_endings завершена"
+        
+        chmod +x "$INSTALL_DIR/$container_name"
+        echo "🔧 DEBUG: Права доступа установлены"
+
         echo -e "${GREEN}✅ Команда '$container_name' установлена${NC}"
     else
         echo -e "${RED}❌ Ошибка установки команды '$container_name'${NC}"
@@ -456,7 +521,7 @@ run_container_with_config() {
         exit 1
     fi
     
-    # Показываем текущие настройки если есть
+    # Показываем текущие настройки если есть (проверяем что не пустые)
     if [ -n "$memory_limit" ] || [ -n "$cpu_limit" ]; then
         echo -e "${BLUE}🔧 Применяемые настройки:${NC}"
         if [ -n "$memory_limit" ]; then
