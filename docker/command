@@ -118,9 +118,14 @@ docker_compose() {
 
 # Функция для проверки и запуска контейнера если нужно
 ensure_container_running() {
-    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
-        echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
-        run_container_with_config "Запуск"
+    # Проверяем, существует ли контейнер (любой статус)
+    if ! docker ps -a --filter "name=$COMMAND_NAME" | grep -q "$COMMAND_NAME"; then
+        echo -e "${YELLOW}⚠️ Контейнер не найден, создаю...${NC}"
+        run_container_with_config "Создание"
+    elif ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
+        echo -e "${YELLOW}⚠️ Контейнер остановлен, запускаю...${NC}"
+        docker start "$COMMAND_NAME"
+        echo -e "${GREEN}✅ Контейнер запущен${NC}"
     fi
 }
 
