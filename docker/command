@@ -42,27 +42,36 @@ PROJECT_DIR=""
 
 # Функция для поиска папки проекта
 find_project_dir() {
+    # Сначала проверяем путь к проекту через volume существующего контейнера
+    if docker ps -a --filter "name=$CONTAINER_STATS_NAME" | grep -q "$CONTAINER_STATS_NAME"; then
+        PROJECT_DIR=$(docker inspect $CONTAINER_STATS_NAME 2>/dev/null | jq -r '.[0].Mounts[] | select(.Destination=="/workspace") | .Source' 2>/dev/null)
+        if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
+            echo -e "${GREEN}✅ Используется путь из volume: $PROJECT_DIR${NC}"
+            return 0
+        fi
+    fi
+    
     # Проверяем переменную окружения
     if [ -n "$COMMAND_PROJECT_DIR" ] && [ -d "$COMMAND_PROJECT_DIR" ]; then
         PROJECT_DIR="$COMMAND_PROJECT_DIR"
         return 0
     fi
     
-    # Ищем папку с docker compose.yml в текущей директории
-    if [ -f "./$DOCKER_DIR/$DOCKER_COMPOSE_FILE" ]; then
+    # Ищем папку с Dockerfile в текущей директории
+    if [ -f "./$DOCKER_DIR/Dockerfile" ]; then
         PROJECT_DIR="$(pwd)"
         return 0
     fi
     
     # Ищем в родительской директории
-    if [ -f "../$DOCKER_DIR/$DOCKER_COMPOSE_FILE" ]; then
+    if [ -f "../$DOCKER_DIR/Dockerfile" ]; then
         PROJECT_DIR="$(dirname "$(pwd)")"
         return 0
     fi
     
     # Ищем в домашней директории
     for dir in "$HOME"/*; do
-        if [ -d "$dir" ] && [ -f "$dir/$DOCKER_DIR/$DOCKER_COMPOSE_FILE" ]; then
+        if [ -d "$dir" ] && [ -f "$dir/$DOCKER_DIR/Dockerfile" ]; then
             PROJECT_DIR="$dir"
             return 0
         fi
@@ -71,7 +80,7 @@ find_project_dir() {
     # Ищем в /opt
     if [ -d "/opt" ]; then
         for dir in /opt/*; do
-            if [ -d "$dir" ] && [ -f "$dir/$DOCKER_DIR/$DOCKER_COMPOSE_FILE" ]; then
+            if [ -d "$dir" ] && [ -f "$dir/$DOCKER_DIR/Dockerfile" ]; then
                 PROJECT_DIR="$dir"
                 return 0
             fi
@@ -184,6 +193,7 @@ install_commands() {
     # Копируем основной скрипт
     if cp "$SCRIPT_PATH" "$INSTALL_DIR/$COMMAND_NAME"; then
         chmod +x "$INSTALL_DIR/$COMMAND_NAME"
+        
         echo -e "${GREEN}✅ Команда '$COMMAND_NAME' установлена${NC}"
     else
         echo -e "${RED}❌ Ошибка установки команды '$COMMAND_NAME'${NC}"
@@ -245,6 +255,13 @@ run_container_with_config() {
     
     echo -e "${YELLOW}🚀 $action контейнера...${NC}"
     
+    # Определяем путь к проекту
+    if ! find_project_dir; then
+        echo -e "${RED}❌ Проект не найден!${NC}"
+        echo -e "${YELLOW}💡 Убедитесь, что вы находитесь в папке проекта или установите переменную COMMAND_PROJECT_DIR${NC}"
+        exit 1
+    fi
+    
     # Показываем текущие настройки если есть
     if [ -n "$MEMORY_LIMIT" ] || [ -n "$CPU_LIMIT" ]; then
         echo -e "${BLUE}🔧 Применяемые настройки:${NC}"
@@ -275,7 +292,7 @@ run_container_with_config() {
     fi
     
     # Добавляем остальные параметры
-    # Проверяем существование .env файла
+    # Автоматически загружаем .env если есть
     if [ -f "$PROJECT_DIR/.env" ]; then
         cmd+=("--env-file" "$PROJECT_DIR/.env")
         echo -e "${GREEN}✅ Найден .env файл, загружаем переменные окружения${NC}"
