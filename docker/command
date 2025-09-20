@@ -27,7 +27,6 @@ MAIN_SCRIPT="main.py"
 
 # Настройки контейнера
 CONTAINER_NAME="coreness-service"
-CONTAINER_STATS_NAME="coreness-container"
 
 # Переменные для настроек контейнера
 MEMORY_LIMIT=""
@@ -43,8 +42,8 @@ PROJECT_DIR=""
 # Функция для поиска папки проекта
 find_project_dir() {
     # Сначала проверяем путь к проекту через volume существующего контейнера
-    if docker ps -a --filter "name=$CONTAINER_STATS_NAME" | grep -q "$CONTAINER_STATS_NAME"; then
-        PROJECT_DIR=$(docker inspect $CONTAINER_STATS_NAME 2>/dev/null | jq -r '.[0].Mounts[] | select(.Destination=="/workspace") | .Source' 2>/dev/null)
+    if docker ps -a --filter "name=$COMMAND_NAME" | grep -q "$COMMAND_NAME"; then
+        PROJECT_DIR=$(docker inspect $COMMAND_NAME 2>/dev/null | jq -r '.[0].Mounts[] | select(.Destination=="/workspace") | .Source' 2>/dev/null)
         if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
             echo -e "${GREEN}✅ Используется путь из volume: $PROJECT_DIR${NC}"
             return 0
@@ -119,7 +118,7 @@ docker_compose() {
 
 # Функция для проверки и запуска контейнера если нужно
 ensure_container_running() {
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
@@ -141,7 +140,6 @@ install_commands() {
     
     # Обновляем глобальные переменные для этого контейнера
     COMMAND_NAME="$container_name"
-    CONTAINER_STATS_NAME="$container_name"
     
     echo -e "${BLUE}================================${NC}"
     echo -e "${BLUE}   УСТАНОВКА ГЛОБАЛЬНЫХ КОМАНД  ${NC}"
@@ -274,14 +272,14 @@ run_container_with_config() {
     fi
     
     # Останавливаем существующий контейнер если есть
-    if docker ps --filter "name=$CONTAINER_STATS_NAME" | grep -q "$CONTAINER_STATS_NAME"; then
+    if docker ps --filter "name=$COMMAND_NAME" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}🛑 Останавливаю существующий контейнер...${NC}"
-        docker stop $CONTAINER_STATS_NAME
-        docker rm $CONTAINER_STATS_NAME
+        docker stop $COMMAND_NAME
+        docker rm $COMMAND_NAME
     fi
     
     # Собираем команду запуска
-    local cmd=("docker" "run" "-d" "--name" "$CONTAINER_STATS_NAME")
+    local cmd=("docker" "run" "-d" "--name" "$COMMAND_NAME")
     
     # Добавляем лимиты если указаны
     if [ -n "$MEMORY_LIMIT" ]; then
@@ -323,7 +321,7 @@ start_service() {
 stop_service() {
     echo -e "${YELLOW}🛑 Остановка контейнера...${NC}"
     
-    if docker stop $CONTAINER_STATS_NAME; then
+    if docker stop $COMMAND_NAME; then
         echo -e "${GREEN}✅ Контейнер остановлен${NC}"
     else
         echo -e "${RED}❌ Ошибка остановки контейнера${NC}"
@@ -341,17 +339,17 @@ start_app() {
     echo -e "${YELLOW}📱 Запуск приложения в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
     
     # Проверяем, работает ли приложение уже
-    if docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null; then
+    if docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null; then
         echo -e "${GREEN}✅ Приложение уже работает${NC}"
     else
         # Запускаем main.py
-        if docker exec -d $CONTAINER_STATS_NAME python3 $MAIN_SCRIPT; then
+        if docker exec -d $COMMAND_NAME python3 $MAIN_SCRIPT; then
             echo -e "${GREEN}✅ Приложение запущено${NC}"
         else
             echo -e "${RED}❌ Ошибка запуска приложения${NC}"
@@ -366,13 +364,13 @@ stop_app() {
     echo -e "${YELLOW}🛑 Остановка приложения в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${RED}❌ Контейнер не запущен!${NC}"
         exit 1
     fi
     
     # Проверяем, есть ли процессы приложения
-    PROCESSES=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    PROCESSES=$(docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT")
     if [ -z "$PROCESSES" ]; then
         echo -e "${YELLOW}⚠️ Приложение не запущено${NC}"
         return 0
@@ -382,21 +380,21 @@ stop_app() {
     
     # Сначала пытаемся мягко остановить (SIGTERM)
     echo -e "${YELLOW}🔄 Отправка SIGTERM...${NC}"
-    docker exec $CONTAINER_STATS_NAME pkill -f "python3 $MAIN_SCRIPT"
+    docker exec $COMMAND_NAME pkill -f "python3 $MAIN_SCRIPT"
     
     # Ждем 3 секунды
     sleep 3
     
     # Проверяем, остановились ли процессы
-    REMAINING=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    REMAINING=$(docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT")
     if [ -n "$REMAINING" ]; then
         echo -e "${YELLOW}⚠️ Процессы не остановились, отправка SIGKILL...${NC}"
-        docker exec $CONTAINER_STATS_NAME pkill -9 -f "python3 $MAIN_SCRIPT"
+        docker exec $COMMAND_NAME pkill -9 -f "python3 $MAIN_SCRIPT"
         sleep 1
     fi
     
     # Финальная проверка
-    FINAL_CHECK=$(docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT")
+    FINAL_CHECK=$(docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT")
     if [ -z "$FINAL_CHECK" ]; then
         echo -e "${GREEN}✅ Приложение остановлено${NC}"
     else
@@ -411,21 +409,21 @@ restart_app() {
     echo -e "${YELLOW}🔄 Перезапуск приложения в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
     
     # Убиваем все процессы main.py в контейнере
     echo -e "${YELLOW}🛑 Остановка приложения...${NC}"
-    docker exec $CONTAINER_STATS_NAME pkill -f "python3 $MAIN_SCRIPT" 2>/dev/null || true
+    docker exec $COMMAND_NAME pkill -f "python3 $MAIN_SCRIPT" 2>/dev/null || true
     
     # Ждем немного, чтобы процессы завершились
     sleep 2
     
     # Запускаем main.py заново
     echo -e "${YELLOW}📱 Запуск приложения...${NC}"
-    if docker exec -d $CONTAINER_STATS_NAME python3 $MAIN_SCRIPT; then
+    if docker exec -d $COMMAND_NAME python3 $MAIN_SCRIPT; then
         echo -e "${GREEN}✅ Приложение перезапущено${NC}"
     else
         echo -e "${RED}❌ Ошибка перезапуска приложения${NC}"
@@ -439,7 +437,7 @@ show_app_logs() {
     echo -e "${YELLOW}📋 Просмотр логов приложения...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
@@ -457,23 +455,23 @@ show_app_logs() {
     echo -e "${YELLOW}📋 Показываю последние $lines строк логов...${NC}"
     
     # Показываем логи приложения из файла
-    docker exec $CONTAINER_STATS_NAME tail -f -n $lines /workspace/logs/bot.log
+    docker exec $COMMAND_NAME tail -f -n $lines /workspace/logs/bot.log
 }
 
 # Универсальная функция для просмотра логов контейнера
 show_logs() {
-    docker logs -f $CONTAINER_STATS_NAME
+    docker logs -f $COMMAND_NAME
 }
 
 # Универсальная функция для проверки статуса
 show_status() {
     echo -e "${BLUE}📊 Статус контейнера:${NC}"
-    docker ps --filter "name=$CONTAINER_STATS_NAME"
+    docker ps --filter "name=$COMMAND_NAME"
     
     echo -e "\n${BLUE}📱 Статус приложения:${NC}"
-    if docker exec $CONTAINER_STATS_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null 2>&1; then
+    if docker exec $COMMAND_NAME pgrep -f "python3 $MAIN_SCRIPT" > /dev/null 2>&1; then
         # Получаем информацию о процессе
-        PROCESS_INFO=$(docker exec $CONTAINER_STATS_NAME ps aux | grep "python3 $MAIN_SCRIPT" | grep -v grep)
+        PROCESS_INFO=$(docker exec $COMMAND_NAME ps aux | grep "python3 $MAIN_SCRIPT" | grep -v grep)
         if [ -n "$PROCESS_INFO" ]; then
             PID=$(echo "$PROCESS_INFO" | awk '{print $2}')
             CPU=$(echo "$PROCESS_INFO" | awk '{print $3}')
@@ -490,7 +488,7 @@ show_status() {
     fi
     
     echo -e "\n${BLUE}📈 Использование ресурсов контейнера:${NC}"
-    docker stats --no-stream $CONTAINER_STATS_NAME 2>/dev/null || echo "Контейнер не запущен"
+    docker stats --no-stream $COMMAND_NAME 2>/dev/null || echo "Контейнер не запущен"
 }
 
 # Функция для работы с БД
@@ -498,14 +496,14 @@ manage_app_database() {
     echo -e "${YELLOW}🗄 Работа с базой данных...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
     
     # Запускаем database_manager.py с переданными параметрами
     shift  # Убираем первый аргумент (app-db)
-    docker exec $CONTAINER_STATS_NAME python3 $DATABASE_MANAGER_SCRIPT "$@"
+    docker exec $COMMAND_NAME python3 $DATABASE_MANAGER_SCRIPT "$@"
 }
 
 # Универсальная функция для запуска shell в контейнере
@@ -513,13 +511,13 @@ open_shell() {
     echo -e "${YELLOW}🐚 Запуск shell в контейнере...${NC}"
     
     # Проверяем, что контейнер запущен
-    if ! docker ps --filter "name=$CONTAINER_STATS_NAME" --filter "status=running" | grep -q "$CONTAINER_STATS_NAME"; then
+    if ! docker ps --filter "name=$COMMAND_NAME" --filter "status=running" | grep -q "$COMMAND_NAME"; then
         echo -e "${YELLOW}⚠️ Контейнер не запущен, запускаю...${NC}"
         run_container_with_config "Запуск"
     fi
     
     # Запускаем bash в контейнере
-    docker exec -it $CONTAINER_STATS_NAME bash
+    docker exec -it $COMMAND_NAME bash
 }
 
 # Функция для обновления приложения
@@ -540,7 +538,7 @@ update_app() {
 # Функция для показа текущих настроек контейнера
 show_container_config() {
     echo -e "${BLUE}📋 Текущие настройки контейнера:${NC}"
-    echo -e "   Имя контейнера: ${CONTAINER_STATS_NAME}"
+    echo -e "   Имя контейнера: ${COMMAND_NAME}"
     echo -e "   Лимит памяти: ${MEMORY_LIMIT:-без ограничений}"
     echo -e "   Лимит CPU: ${CPU_LIMIT:-без ограничений}"
     echo -e "   Образ: coreness-image"
@@ -690,6 +688,13 @@ main() {
     if [ "$1" = "install" ]; then
         install_commands "$2"  # Передаем второй параметр как имя контейнера
         exit 0
+    fi
+    
+    # Обновляем COMMAND_NAME на основе имени скрипта
+    # Если скрипт запущен как алиас (например, ctest), используем это имя
+    SCRIPT_BASENAME=$(basename "$0")
+    if [ "$SCRIPT_BASENAME" != "command" ]; then
+        COMMAND_NAME="$SCRIPT_BASENAME"
     fi
     
     # Для остальных команд проверяем Docker
