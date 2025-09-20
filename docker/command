@@ -275,8 +275,15 @@ run_container_with_config() {
     fi
     
     # Добавляем остальные параметры
-    cmd+=("--env-file" ".env")
-    cmd+=("-v" ".:/workspace")
+    # Проверяем существование .env файла
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        cmd+=("--env-file" "$PROJECT_DIR/.env")
+        echo -e "${GREEN}✅ Найден .env файл, загружаем переменные окружения${NC}"
+    else
+        echo -e "${YELLOW}⚠️ .env файл не найден, запускаем без переменных окружения${NC}"
+    fi
+    
+    cmd+=("-v" "$PROJECT_DIR:/workspace")
     cmd+=("coreness-image")
     cmd+=("tail" "-f" "/dev/null")
     
