@@ -964,6 +964,8 @@ class UtilityManager:
     def _run_with_progress_output(self, command, description="Выполнение команды", cwd=None, buffer_size=None):
         """Запускает команду с прогрессом и динамическим обновлением логов"""
         import time
+        import select
+        import sys
         
         # Определяем параметры для subprocess в зависимости от типа команды
         if isinstance(command, str):
@@ -985,20 +987,56 @@ class UtilityManager:
         start_time = time.time()
         last_lines = []
         max_lines = buffer_size * 2  # Сохраняем в 2 раза больше логов чем размер буфера
+        last_update_time = start_time
+        update_interval = 1.0  # Обновляем каждые 2 секунды
         
         while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
+            # Проверяем, завершился ли процесс
+            if process.poll() is not None:
                 break
-            if output:
-                line = output.strip()
-                if line:  # Только непустые строки
-                    last_lines.append(line)
-                    if len(last_lines) > max_lines:
-                        last_lines.pop(0)
-                    
-                    # Обновляем вывод
-                    self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+            
+            # Используем select для неблокирующего чтения (только на Unix)
+            if hasattr(select, 'select'):
+                # Unix-системы
+                ready, _, _ = select.select([process.stdout], [], [], 0.1)  # Таймаут 0.1 секунды
+                if ready:
+                    output = process.stdout.readline()
+                    if output:
+                        line = output.strip()
+                        if line:  # Только непустые строки
+                            last_lines.append(line)
+                            if len(last_lines) > max_lines:
+                                last_lines.pop(0)
+                            
+                            # Обновляем вывод сразу при получении новой строки
+                            self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+                            last_update_time = time.time()
+            else:
+                # Windows - используем простой подход с таймаутом
+                try:
+                    output = process.stdout.readline()
+                    if output:
+                        line = output.strip()
+                        if line:  # Только непустые строки
+                            last_lines.append(line)
+                            if len(last_lines) > max_lines:
+                                last_lines.pop(0)
+                            
+                            # Обновляем вывод сразу при получении новой строки
+                            self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+                            last_update_time = time.time()
+                    else:
+                        # Если нет новых строк, ждем немного
+                        time.sleep(0.1)
+                except:
+                    # Если произошла ошибка чтения, ждем немного
+                    time.sleep(0.1)
+            
+            # Периодически обновляем вывод даже если нет новых строк
+            current_time = time.time()
+            if current_time - last_update_time >= update_interval:
+                self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+                last_update_time = current_time
             
             # Принудительно очищаем буферы процесса
             if hasattr(process.stdout, 'flush'):
@@ -1084,14 +1122,39 @@ class UtilityManager:
                 self.messages.print_output(f"{Colors.RED}❌ Не удалось установить pip: {e}{Colors.END}\n")
                 return False
         
-        # Обновляем pip до последней версии
+        # Сначала пробуем стандартный способ через pip
         return_code = self._run_with_progress_output(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
+            [sys.executable, "-m", "pip", "install", "--upgrade", "pip", "--break-system-packages"],
             "Обновление pip до последней версии"
         )
         
-        if return_code != 0:
-            self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось обновить pip, продолжаем...{Colors.END}\n")
+        if return_code == 0:
+            self.messages.print_output(f"{Colors.GREEN}✅ pip обновлен через pip{Colors.END}\n")
+        else:
+            self.messages.print_output(f"{Colors.YELLOW}⚠️ Стандартное обновление не удалось, пробуем системный способ...{Colors.END}\n")
+            
+            # Fallback на системный способ через apt
+            try:
+                return_code = self._run_with_progress_output(
+                    ['sudo', 'apt', 'update'],
+                    "Обновление репозиториев apt"
+                )
+                
+                if return_code == 0:
+                    return_code = self._run_with_progress_output(
+                        ['sudo', 'apt', 'install', '--only-upgrade', 'python3-pip'],
+                        "Обновление pip через apt"
+                    )
+                    
+                    if return_code == 0:
+                        self.messages.print_output(f"{Colors.GREEN}✅ pip обновлен через apt{Colors.END}\n")
+                    else:
+                        self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось обновить pip через apt, продолжаем с текущей версией...{Colors.END}\n")
+                else:
+                    self.messages.print_output(f"{Colors.YELLOW}⚠️ Не удалось обновить репозитории apt, продолжаем с текущей версией pip...{Colors.END}\n")
+                    
+            except Exception as e:
+                self.messages.print_output(f"{Colors.YELLOW}⚠️ Ошибка обновления pip: {e}, продолжаем...{Colors.END}\n")
         
         return True
 
@@ -1102,10 +1165,10 @@ class UtilityManager:
             if not self._ensure_pip_available():
                 return False
             
-            # Устанавливаем недостающие пакеты
+            # Устанавливаем недостающие пакеты с обходом externally-managed-environment
             for package in packages:
                 return_code = self._run_with_progress_output(
-                    [sys.executable, "-m", "pip", "install", package],
+                    [sys.executable, "-m", "pip", "install", package, "--break-system-packages"],
                     f"Установка {package}"
                 )
                 
@@ -1223,9 +1286,9 @@ class UtilityManager:
             if not self._ensure_pip_available():
                 return False
             
-            # Устанавливаем зависимости из requirements.txt
+            # Устанавливаем зависимости из requirements.txt с обходом externally-managed-environment
             return_code = self._run_with_progress_output([
-                sys.executable, "-m", "pip", "install", "-r", requirements_file
+                sys.executable, "-m", "pip", "install", "-r", requirements_file, "--break-system-packages"
             ], "Установка зависимостей из requirements.txt")
             
             if return_code != 0:
