@@ -38,13 +38,13 @@ python3 core_updater.py
 После установки доступны команды:
 
 ```bash
-coreness start      # Запустить
-coreness stop       # Остановить
-coreness restart    # Перезапустить
-coreness logs       # Показать логи
-coreness status     # Показать статус
-coreness update     # Обновить
-coreness help       # Справка
+command start      # Запустить
+command stop       # Остановить
+command restart    # Перезапустить
+command logs       # Показать логи
+command status     # Показать статус
+command update     # Обновить
+command help       # Справка
 ```
 
 ---
@@ -52,7 +52,7 @@ coreness help       # Справка
 ## 🔄 Обновление
 
 ```bash
-coreness update
+command update
 ```
 
 Или запустите скрипт обновления:
@@ -65,10 +65,10 @@ python3 core_updater.py
 ## 🆘 Помощь
 
 ```bash
-coreness help       # Показать справку
-coreness status     # Проверить статус
-coreness logs       # Посмотреть логи
-coreness restart    # Перезапустить
+command help       # Показать справку
+command status     # Проверить статус
+command logs       # Посмотреть логи
+command restart    # Перезапустить
 ```
 
 ### Если что-то не работает
