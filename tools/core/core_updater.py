@@ -621,10 +621,10 @@ class DockerManager:
                 return False
         
         try:
-            # Проверяем, есть ли уже контейнер с таким именем
+            # Проверяем, есть ли уже контейнер с таким именем (точное совпадение)
             self.messages.print_output(f"{Colors.CYAN}🔍 Проверяю существующий контейнер '{container_name}'...{Colors.END}\n")
             existing_containers = subprocess.run(
-                ['docker', 'ps', '-a', '--filter', f'name={container_name}', '--format', '{{.Names}}'],
+                ['docker', 'ps', '-a', '--filter', f'name=^{container_name}$', '--format', '{{.Names}}'],
                 capture_output=True, text=True
             )
             
@@ -1809,9 +1809,11 @@ class CoreUpdater:
                 self.messages.print_output(f"{Colors.CYAN}💡 Используется имя по умолчанию: '{container_name}'{Colors.END}\n")
                 break
             
-            # Валидация имени контейнера
-            if not container_name.replace('-', '').replace('_', '').isalnum():
-                self.messages.print_output(f"{Colors.RED}❌ Имя контейнера может содержать только буквы, цифры, дефисы и подчеркивания{Colors.END}\n")
+            # Валидация имени контейнера - только латинские буквы, цифры, дефисы и подчеркивания
+            import re
+            if not re.match(r'^[a-zA-Z0-9_-]+$', container_name):
+                self.messages.print_output(f"{Colors.RED}❌ Имя контейнера может содержать только латинские буквы (a-z, A-Z), цифры, дефисы и подчеркивания{Colors.END}\n")
+                self.messages.print_output(f"{Colors.YELLOW}💡 Кириллические символы не поддерживаются Docker{Colors.END}\n")
                 continue
             
             if len(container_name) < 2:
