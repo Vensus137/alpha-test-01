@@ -287,7 +287,6 @@ class TriggerManager:
                     status = 'failed'
                 else:
                     status = 'pending'
-                self.logger.warning(f"Действие chain=true, но previous_id отсутствует — создаем как {status}")
         else:
             if is_failed:
                 status = 'failed'

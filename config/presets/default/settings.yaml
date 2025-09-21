@@ -24,7 +24,7 @@ global:
   default_ssl_certificate: "russian_certs.pem"    # Дефолтный SSL сертификат
   enable_global_placeholders: false
 
-# === НАСТРОЙКИ СЕРВИСОВ ===
+# === НАСТРОЙКИ РОЛЕЙ И ПРАВ ДОСТУПА ===
 
 permission_manager:
   roles: {}
@@ -41,9 +41,13 @@ tg_command_registry:
     chats: []                    # Список чатов для очистки команд (scope: chat)
     chat_members: []             # Список пользователей в чатах для очистки команд (scope: chat_member)
 
+# === НАСТРОЙКИ ЛОГГЕРА ===
+
 logger:
   console_enabled: true
   file_enabled: true
+
+# === НАСТРОЙКИ ОБРАБОТКИ СОБЫТИЙ ===
 
 tg_event_bot:
   max_event_age_seconds: 0
@@ -52,5 +56,4 @@ tg_event_mtproto:
   enabled: false
   allowed_chats: []
 
-
-
+# === НАСТРОЙКИ СЕРВИСОВ ===

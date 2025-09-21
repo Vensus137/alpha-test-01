@@ -44,8 +44,6 @@ class UserStatesRepository:
                 self.session.delete(user_state)
                 self.session.commit()
         
-            else:
-                self.logger.warning(f"Попытка очистить несуществующее состояние для пользователя {user_id}")
             return True
             
         except Exception as e:
