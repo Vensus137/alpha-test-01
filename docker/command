@@ -741,10 +741,9 @@ show_status() {
     fi
     
     echo -e "\n${BLUE}🔄 PM2 процессы:${NC}"
-    PM2_LIST=$(docker exec -it $container_name pm2 list 2>/dev/null)
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ PM2 статус:${NC}"
-        echo "$PM2_LIST"
+    # Выводим PM2 напрямую в интерактивном режиме для красивого вывода
+    if docker exec -it $container_name pm2 list 2>/dev/null; then
+        echo -e "${GREEN}✅ PM2 статус показан выше${NC}"
     else
         echo -e "${YELLOW}⚠️ PM2 не запущен или недоступен${NC}"
     fi
