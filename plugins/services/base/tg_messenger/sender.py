@@ -159,7 +159,4 @@ class MessageSender:
                 parse_mode=parse_mode
             )
         except TelegramBadRequest as e:
-            self.logger.warning(
-                f"edit_message не удался для chat_id={chat_id}, message_id={message_id}: {e}. Отправляю новое сообщение."
-            )
             await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
