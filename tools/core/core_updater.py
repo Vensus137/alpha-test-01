@@ -39,6 +39,10 @@ try:
     os.environ['LC_ALL'] = 'C.UTF-8'
     os.environ['LANG'] = 'C.UTF-8'
     
+    # Для Windows - устанавливаем кодировку консоли
+    if platform.system().lower() == 'windows':
+        os.system('chcp 65001 >nul 2>&1')  # Устанавливаем UTF-8 в консоли
+    
     # Пытаемся установить локаль UTF-8
     try:
         locale.setlocale(locale.LC_ALL, 'C.UTF-8')
@@ -967,15 +971,21 @@ class UtilityManager:
         import select
         import sys
         
+        # Определяем кодировку для сабпроцесса
+        # Используем кодировку из переменных окружения, установленных в начале скрипта
+        subprocess_encoding = os.environ.get('PYTHONIOENCODING', 'utf-8')
+        
         # Определяем параметры для subprocess в зависимости от типа команды
         if isinstance(command, str):
             # Shell команда
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                      text=True, bufsize=0, universal_newlines=True, shell=True, cwd=cwd)
+                                      text=True, bufsize=0, universal_newlines=True, shell=True, cwd=cwd, env=os.environ,
+                                      encoding=subprocess_encoding, errors='replace')
         else:
             # Команда как список
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                      text=True, bufsize=0, universal_newlines=True, cwd=cwd)
+                                      text=True, bufsize=0, universal_newlines=True, cwd=cwd, env=os.environ,
+                                      encoding=subprocess_encoding, errors='replace')
         
         self.messages.print_output(f"{Colors.CYAN}🔄 {description}...{Colors.END}\n")
         
@@ -995,24 +1005,28 @@ class UtilityManager:
             if process.poll() is not None:
                 break
             
-            # Используем select для неблокирующего чтения (только на Unix)
-            if hasattr(select, 'select'):
-                # Unix-системы
-                ready, _, _ = select.select([process.stdout], [], [], 0.1)  # Таймаут 0.1 секунды
-                if ready:
-                    output = process.stdout.readline()
-                    if output:
-                        line = output.strip()
-                        if line:  # Только непустые строки
-                            last_lines.append(line)
-                            if len(last_lines) > max_lines:
-                                last_lines.pop(0)
-                            
-                            # Обновляем вывод сразу при получении новой строки
-                            self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
-                            last_update_time = time.time()
+            # Определяем платформу для выбора метода чтения
+            if platform.system().lower() in ['linux', 'darwin']:
+                # Linux/macOS - используем select для неблокирующего чтения
+                try:
+                    ready, _, _ = select.select([process.stdout], [], [], 0.1)  # Таймаут 0.1 секунды
+                    if ready:
+                        output = process.stdout.readline()
+                        if output:
+                            line = output.strip()
+                            if line:  # Только непустые строки
+                                last_lines.append(line)
+                                if len(last_lines) > max_lines:
+                                    last_lines.pop(0)
+                                
+                                # Обновляем вывод сразу при получении новой строки
+                                self._update_progress_display(last_lines, start_time, description, buffer_size=buffer_size)
+                                last_update_time = time.time()
+                except:
+                    # Если select не работает, ждем немного
+                    time.sleep(0.1)
             else:
-                # Windows - используем простой подход с таймаутом
+                # Windows и другие системы - используем простой подход
                 try:
                     output = process.stdout.readline()
                     if output:
