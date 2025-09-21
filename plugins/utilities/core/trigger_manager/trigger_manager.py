@@ -49,7 +49,9 @@ class TriggerManager:
         # 1. Поиск всех сценариев по событию
         scenario_names = self.trigger_processing.find_all_scenarios_by_event(event)
         if not scenario_names:
-            self.logger.warning(f"Триггер не найден для ивента: {event}")
+            # Сокращенная информация об ивенте для логов
+            event_info = f"user_id={event.get('user_id')}, chat_id={event.get('chat_id')}, text='{event.get('event_text', '')[:20]}...'"
+            self.logger.warning(f"Триггер не найден для ивента: {event_info}")
             return
             
         # 2. Обработка всех найденных сценариев
