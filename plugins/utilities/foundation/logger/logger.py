@@ -13,14 +13,36 @@ class Logger:
     
     def __init__(self):
         """Инициализация логгера с поддержкой пресетов"""
+        # Определяем корень проекта
+        self.project_root = self._find_project_root(Path(__file__))
+        
+        # Путь к глобальным настройкам
+        self.global_settings_path = self.project_root / 'config' / 'settings.yaml'
+        
         # Получаем текущий пресет из глобальных настроек
         self.preset = self._get_current_preset()
         
-        # Путь к глобальным настройкам
-        self.global_settings_path = Path('config/settings.yaml')
-        
         # Путь к настройкам пресета
-        self.preset_settings_path = Path(f'config/presets/{self.preset}/settings.yaml')
+        self.preset_settings_path = self.project_root / 'config' / 'presets' / self.preset / 'settings.yaml'
+    
+    @staticmethod
+    def _find_project_root(start_path: Path) -> Path:
+        """Надежно определяет корень проекта"""
+        # Сначала проверяем переменную окружения
+        env_root = os.environ.get('PROJECT_ROOT')
+        if env_root and os.path.exists(env_root):
+            return Path(env_root)
+        
+        # Ищем корень проекта по наличию config/settings.yaml
+        current_path = start_path.resolve()
+        while current_path != current_path.parent:
+            config_file = current_path / 'config' / 'settings.yaml'
+            if config_file.exists():
+                return current_path
+            current_path = current_path.parent
+        
+        # Если не найден, возвращаем текущую директорию
+        return Path.cwd()
     
     # --- Вспомогательные преобразования для безопасного слияния настроек ---
     def _to_bool(self, value, fallback: bool) -> bool:
