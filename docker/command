@@ -723,23 +723,30 @@ show_status() {
     echo -e "${BLUE}📊 Статус контейнера:${NC}"
     docker ps --filter "name=$container_name"
     
-    echo -e "\n${BLUE}📱 Статус приложения:${NC}"
-    if docker exec $container_name pgrep -f "python3 $(get_main_script)" > /dev/null 2>&1; then
-        # Получаем информацию о процессе
-        PROCESS_INFO=$(docker exec $container_name ps aux | grep "python3 $(get_main_script)" | grep -v grep)
-        if [ -n "$PROCESS_INFO" ]; then
-            PID=$(echo "$PROCESS_INFO" | awk '{print $2}')
-            CPU=$(echo "$PROCESS_INFO" | awk '{print $3}')
-            MEM=$(echo "$PROCESS_INFO" | awk '{print $4}')
-            TIME=$(echo "$PROCESS_INFO" | awk '{print $10}')
-            echo -e "${GREEN}✅ Приложение работает${NC}"
+    echo -e "\n${BLUE}📱 Нативные процессы:${NC}"
+    NATIVE_PROCESSES=$(docker exec $container_name ps aux | grep python3 | grep -v grep)
+    if [ -n "$NATIVE_PROCESSES" ]; then
+        echo -e "${GREEN}✅ Нативные Python процессы:${NC}"
+        echo "$NATIVE_PROCESSES" | while read line; do
+            PID=$(echo "$line" | awk '{print $2}')
+            CPU=$(echo "$line" | awk '{print $3}')
+            MEM=$(echo "$line" | awk '{print $4}')
+            TIME=$(echo "$line" | awk '{print $10}')
+            CMD=$(echo "$line" | awk '{for(i=11;i<=NF;i++) printf "%s ", $i; print ""}')
             echo -e "   PID: $PID | CPU: $CPU% | MEM: $MEM% | TIME: $TIME"
-        else
-            echo -e "${YELLOW}⚠️ Процесс найден, но информация недоступна${NC}"
-        fi
+            echo -e "   CMD: $CMD"
+        done
     else
-        echo -e "${RED}❌ Приложение не запущено${NC}"
-        echo -e "${YELLOW}💡 Запустите: $container_name start${NC}"
+        echo -e "${YELLOW}⚠️ Нативные Python процессы не найдены${NC}"
+    fi
+    
+    echo -e "\n${BLUE}🔄 PM2 процессы:${NC}"
+    PM2_LIST=$(docker exec -it $container_name pm2 list 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ PM2 статус:${NC}"
+        echo "$PM2_LIST"
+    else
+        echo -e "${YELLOW}⚠️ PM2 не запущен или недоступен${NC}"
     fi
     
     echo -e "\n${BLUE}📈 Использование ресурсов контейнера:${NC}"
