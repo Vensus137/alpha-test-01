@@ -24,7 +24,7 @@ WORKDIR /workspace
 RUN pip install aiogram==3.4.1 PyYAML==6.0.1 SQLAlchemy==2.0.25 aiosqlite==0.19.0
 
 # Шаг 2: Утилиты
-RUN pip install python-dotenv==1.0.0 pytz==2024.1 unidecode emoji
+RUN pip install python-dotenv==1.0.0 pytz==2024.1 unidecode emoji psutil>=5.9.0
 
 # Шаг 3: Сетевые библиотеки
 RUN pip install requests>=2.31.0
